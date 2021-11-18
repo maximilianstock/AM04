@@ -310,7 +310,7 @@ userdatall <- left_join(userdatall, q2, by = "user_id")
 #we also create a factor variable for the type of user (light, heavy, medium) based on the number of shows to be able to see distributions amongst them.
 
 userdatall <- userdatall %>% 
-  mutate(userType = ifelse(noShows < 5, "light" , if_else(noShows >= 5 & noShows < 20, "medium", "heavy")))
+  mutate(userType = ifelse(noShows < 10, "light" , if_else(noShows >= 10 & noShows < 50, "medium", "heavy")))
 
 
 userdatall <- userdatall %>%
@@ -338,13 +338,20 @@ userdatall %>%
 ```{r}
 #Insert your code here:
 ggplot(userdatall, aes(x= noShows)) +
-  geom_density()
+  geom_density()+
+  theme_bw()
+
 ggplot(userdatall, aes(x= total_Time)) +
-  geom_histogram()
+  geom_histogram()+
+  theme_bw()
+
+ggplot(userdatall, aes(x = userType, y = total_Time)) +
+  geom_boxplot() +
+  ylim(0, 3500) + #we limit this graph to
+  theme_bw()
+  
   
 ```
-
-
 
 ## Delete infrequent users
 
@@ -353,7 +360,7 @@ Delete the records for users whose total view time is less than 5 minutes and wh
 
 ```{r delete}
 userdata_red<-userdatall%>%filter(total_Time>=5)%>%filter(noShows>=5)
-ggplot(userdata_red, aes(x=total_Time)) +geom_histogram(binwidth=25)+labs(x="Total Time Watched (mins)", y= "Count")
+ggplot(userdata_red, aes(x=total_Time)) +geom_histogram(binwidth=25)+labs(x="Total Time Watched (mins)", y= "Count") + theme_bw()
 glimpse(userdata_red)
 ```
 
@@ -374,6 +381,10 @@ Use `summary("kmeans Object")` to examine the components of the results of the c
 
 k=2
 # Get rid of variables that you might not need. Do not include no shows as well because it is highly correlated with total time
+
+userdatall %>% userdatall %>% 
+  select(-c("user_id"))
+
 
 #log transform total time to reduce the impact of outliers 
 

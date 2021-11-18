@@ -421,7 +421,7 @@ userClusterCenters <- data.frame(cluster = as.factor(c(1:2)), KMeans2Clusters$ce
 #transpose this data frame
 userClusterCentersTransposed <- userClusterCenters %>% gather(variable,value,-cluster,factor_key = TRUE)
 
-graphUserClusters <- ggplot(userClusterCentersTransposed, aes(x = variable, y = value)) +
+graphK2 <- ggplot(userClusterCentersTransposed, aes(x = variable, y = value)) +
   geom_line(aes(color = cluster, group = cluster),  size = 1)+
   geom_point(size=1,shape=4) + 
   geom_hline(yintercept=0) +
@@ -429,7 +429,7 @@ graphUserClusters <- ggplot(userClusterCentersTransposed, aes(x = variable, y = 
   theme(text = element_text(size=10),
         axis.text.x = element_text(angle=45, hjust=1),)
 
-graphUserClusters
+graphK2
 
 
 ```
@@ -560,9 +560,6 @@ fviz_nbclust(kMeansUserdatall, kmeans, method = "silhouette",k.max = 20)
 > Question 5: Summarize the conclusions of your Elbow Chart and Silhoutte analysis. What range of values for the number of clusters seems more plausible?
 
 
-
-
-
 ## Comparing k-means with different k
 
 >Question 6: For simplicity let's focus on lower values. Now find the clusters using kmeans for k=3, 4 and 5. Plot the centers and check the number of observations in each cluster. Based on these graphs which one seems to be more plausible? Which clusters are observable in each case? Don't forget to check the cluster sizes.
@@ -591,7 +588,7 @@ userClusterCentersTransposed4 <- userClusterCenters4 %>% gather(variable,value,-
 userClusterCentersTransposed5 <- userClusterCenters5 %>% gather(variable,value,-cluster,factor_key = TRUE)
 
 
-ggplot(userClusterCentersTransposed3, aes(x = variable, y = value)) +
+graphK3 <- ggplot(userClusterCentersTransposed3, aes(x = variable, y = value)) +
   geom_line(aes(color = cluster, group = cluster),  size = 1)+
   geom_point(size=1,shape=4) + 
   geom_hline(yintercept=0) +
@@ -600,7 +597,7 @@ ggplot(userClusterCentersTransposed3, aes(x = variable, y = value)) +
         axis.text.x = element_text(angle=45, hjust=1),) +
   labs(subtitle = paste("Cluster 1:", KMeans3Clusters$size[1], "\nCluster 2:",KMeans3Clusters$size[2], "\nCluster 3:", KMeans3Clusters$size[3]))
 
-ggplot(userClusterCentersTransposed4, aes(x = variable, y = value)) +
+graphK4 <- ggplot(userClusterCentersTransposed4, aes(x = variable, y = value)) +
   geom_line(aes(color = cluster, group = cluster),  size = 1)+
   geom_point(size=1,shape=4) + 
   geom_hline(yintercept=0) +
@@ -608,8 +605,8 @@ ggplot(userClusterCentersTransposed4, aes(x = variable, y = value)) +
   theme(text = element_text(size=10),
         axis.text.x = element_text(angle=45, hjust=1),) +
   labs(subtitle = paste("Cluster 1:", KMeans4Clusters$size[1], "\nCluster 2:",KMeans4Clusters$size[2], "\nCluster 3:", KMeans4Clusters$size[3], "\nCluster 4:", KMeans4Clusters$size[4]))
-
-ggplot(userClusterCentersTransposed5, aes(x = variable, y = value)) +
+ 
+graphK5 <- ggplot(userClusterCentersTransposed5, aes(x = variable, y = value)) +
   geom_line(aes(color = cluster, group = cluster),  size = 1)+
   geom_point(size=1,shape=4) + 
   geom_hline(yintercept=0) +
@@ -618,12 +615,20 @@ ggplot(userClusterCentersTransposed5, aes(x = variable, y = value)) +
         axis.text.x = element_text(angle=45, hjust=1),) +
   labs(subtitle = paste("Cluster 1:", KMeans5Clusters$size[1], "\nCluster 2:",KMeans5Clusters$size[2], "\nCluster 3:", KMeans5Clusters$size[3], "\nCluster 4:", KMeans5Clusters$size[4], "\nCluster 5:", KMeans5Clusters$size[5]))
 
+grid.arrange(graphK2, graphK3, graphK4, graphK5, nrow = 4)
 
 ```
 
+We also decide to analyse the clusters based on silhouette:
 
+```{r fig.width= 10, fig.height=6}
+s2<-fviz_silhouette(KMeans2Clusters)+ ggtitle(paste("k = 2", "avg sw=",format(round(KMeans2Clusters$silinfo$avg.width,3))))
+s3<-fviz_silhouette(KMeans3Clusters)+ ggtitle(paste("k = 3", "avg sw=",format(round(KMeans3Clusters$silinfo$avg.width,3))))
+s4<-fviz_silhouette(KMeans4Clusters)+ ggtitle(paste("k = 4", "avg sw=",format(round(KMeans4Clusters$silinfo$avg.width,3))))
+s5<-fviz_silhouette(KMeans5Clusters)+ ggtitle(paste("k = 5", "avg sw=",format(round(KMeans5Clusters$silinfo$avg.width,3))))
+grid.arrange(s2, s3,s4,s5, nrow = 2)
 
-
+```
 
 # Comparing results of different clustering algorithms
 
@@ -635,10 +640,40 @@ Fit a PAM model for the k value you chose above for k-means. Determine how many 
 
 ```{r }
 #your code here
+k=5
+k5_pam <-eclust(kMeansUserdatall, "pam", k = k, graph = FALSE)
 
+#plot mediods
+k5cluster_medoids<-data.frame(cluster=as.factor(c(1:k)),k5_pam$medoids)
+
+k5cluster_medoids_t<-k5cluster_medoids %>%
+  gather(variable,value,-cluster,factor_key = TRUE)
+
+k5graphkMediods_Pam<-ggplot(k5cluster_medoids_t, aes(x = variable, y = value))+  geom_line(aes(color =cluster,group = cluster), linetype = "dashed",size=1)+ geom_point(size=1,shape=4)+geom_hline(yintercept=0)+theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1),)+ggtitle("Pam Medoids k=3")
+
+k5graphkMediods_Pam
 ```
 
 
+```{r }
+#plot centers to make it more comparable to K means
+medioteUserdatallWithClusters<-mutate(kMeansUserdatall, 
+                                   cluster = as.factor(k5_pam$cluster))
+
+medioteCenter_locations <- medioteUserdatallWithClusters%>% group_by(cluster) %>% summarize_at(vars(total_Time:avgViewPerc),mean)
+
+#Next I use gather to collect information together
+medioteCenterData <- gather(medioteCenter_locations, key = "variable", value = "value",-cluster,factor_key = TRUE)
+
+#Next I use ggplot to visualize centers
+medioteCenterPlot <-ggplot(medioteCenterData, aes(x = variable, y = value))+  geom_line(aes(color = cluster,group = cluster), linetype = "dashed",size=1)+ geom_point(size=2,shape=4)+geom_hline(yintercept=0)+ggtitle(paste("PAM Centers k=",k))+labs(fill = "Cluster")+theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1),legend.title=element_text(size=5),legend.text = element_text(size=5))+scale_colour_manual(values = c("darkgreen", "orange", "red","blue", "black"))
+
+
+medioteCenterPlot
+
+```
 
 
 ## H-Clustering
@@ -647,15 +682,36 @@ Use Hierercahial clustering with the same k you chose above. Set hc_method equal
 
 ```{r h-cluster}
 #your code here
+res.dist <- dist(kMeansUserdatall, method = "euclidean")
 
-```
+
+res.hc <-  hcut(res.dist, hc_method = "ward.D",k=k)
+summary(res.hc)
+fviz_silhouette(res.hc)
+#Let's look at the size of the clusters
+res.hc$size
+#plot(res.hc,hang = -1, cex = 0.5)
+fviz_dend(res.hc, cex = 0.5, main="k=4 ward.D",lwd = 0.5)
+
 
 Plot the centers of H-clusters and compare the results with K-Means and PAM.
 
-```{r fig.width=7, fig.height = 12}
+{r fig.width=7, fig.height = 12}
 #your code here
+user_withClusters<-mutate(user_cluster, cluster = as.factor(res.hc$cluster))
+
+center_locations <- user_withClusters%>% group_by(cluster) %>% summarize_at(vars(total_Time:Learning),mean)
+
+#Next I use gather to collect information together
+xa2<- gather(center_locations, key = "variable", value = "value",-cluster,factor_key = TRUE)
+
+#Next I use ggplot to visualize centers
+hclust_center<-ggplot(xa2, aes(x = variable, y = value,order=cluster))+  geom_line(aes(color = cluster,group = cluster), linetype = "dashed",size=1)+ geom_point(size=2,shape=4)+geom_hline(yintercept=0)+ggtitle("H-clust K=4")+labs(fill = "Cluster")+scale_colour_manual(values = c("darkgreen", "orange", "red","blue")) 
+## Compare it with KMeans
+hclust_center
 
 ```
+
 
 >Question 7: Based on the results of these three methods, what can you conclude?
 

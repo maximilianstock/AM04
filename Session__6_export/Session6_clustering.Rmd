@@ -1,0 +1,825 @@
+---
+title: "Sessions 6 & 7: Whisky Analytics-Exploratory data analysis using clustering"
+author: "Dr Kanishka Bhattacharya"
+date: "`r Sys.Date()`"
+output: 
+    html_document:
+      number_sections: true
+      highlight: haddock
+      theme: spacelab
+      toc: yes
+      toc_depth: 2
+      toc_float:
+        collapsed: false
+---
+
+
+
+<!--begin html code: I will mark the html code in my markdown files, these are not directly related to the course material-->
+<style>
+img {
+  border-radius: 15px;
+}
+</style>
+<style>
+body {
+text-align: justify}
+</style>
+
+<style>
+div.grey { background-color:#DCDCDC; border-radius: 5px; padding: 20px; border-style: groove;}
+</style>
+
+<style>
+div.font {color="red"}
+</style>
+
+
+<style>
+div.navy { background-color:#A2A2B6; border-radius: 5px; padding: 20px; border-style: groove; color: #ffffff;}
+
+</style>
+
+<!--end html code-->
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r huxtable-stuff, include=FALSE}
+
+#I start all my markdowm files by laoding the libraries I use throughout. This is for quick reference
+options("huxtable.knit_print_df" = FALSE)
+
+if(!is.element("tidyverse", installed.packages()[,1]))
+{  install.packages("tidyverse")}
+if(!is.element("cluster", installed.packages()[,1]))
+{  install.packages("cluster")}
+if(!is.element("factoextra", installed.packages()[,1]))
+{  install.packages("factoextra")}
+if(!is.element("Hmisc", installed.packages()[,1]))
+{  install.packages("Hmisc")}
+
+require(tidyverse)
+require(Hmisc)
+require(digest)
+require(cluster)    # clustering algorithms
+require(factoextra) # an umbrealla library for clustering algorithms & visualizations
+```
+# Learning Objectives for Session 6
+
+
+
+ <div class = "grey">
+ <ol type="i">
+<li> What is the difference between supervised and unsupervised learning?
+<li> What is the main objective of clustering?
+<li> How does K-Means algorithm work?
+<ol type="a">
+<li> Objective
+<li> Inputs
+<li> Outputs
+</ol>
+<li> How do we determine how many clusters we have in the data? (These tools can be applied with any clustering method).
+<ol type="a">
+<li> Elbow charts
+<li> PCA visualization
+<li> Comparing clustering results with different number of clusters
+<li> Silhouette analysis
+</ol>
+</ol> 
+</div>
+
+
+
+# Introduction
+<!--begin html code: I will mark the html code in my markdown files, these are not directly related to the course material-->
+
+
+<img src="whisky.gif" width="250px" align="right" style="padding-left: 7.5px; padding-right: 7.5px">
+
+
+<!--end html code-->
+
+Whisky (or whiskey, from the Gaelic uisge beatha, 'water of life') is technically defined as an alcoholic liquor obtained by distillation of a fermented starchy compound, usually a grain. Although distillation, including that of fermented grain, had been invented by the Chinese at least as far back as the 7th century AD, five centuries before it was introduced or rediscovered by Europeans, it is in Scotland that whisky has known its full development in diversity. In total there are currently more than 100 Scotch whisky distilleries, for a total of over 300 whiskies sold as single malts. This excludes the innumerable blended whiskies made of assemblages of liquors of different qualities or brands.
+It is interesting that Scotland alone has developed such a diversity of whiskies, matured and sold as single malts. There are only a handful of other pure malts in the world, specifically in Ireland, India and Japan. Single malts are well known by amateurs to differ widely in nose, colour, body, palate and finish. We are interested in discovering what are the main types of single-malt Scotches are and in what way they differ.
+We will use data from a connoisseur's guide to malt whiskies of Scotland. This guide contains a description of single malts from 86 distilleries of Scotland, which we will use to answer the following questions.
+
+1.	What are the major types of single-malt whiskies that can be recognized? What are their chief characteristics and the best representatives? 
+
+2.	What is the geographic component in that classification? 
+
+For wine, it is well known that the region its grapes were grown has an impact on taste. In fact the origins of wines are widely used in grouping them in stores and restaurant menus, eg. Bordeaux wine. This has become common practice for whiskies as well and distilleries even use their geographical location in naming their products, e.g. Highland Single Malt whisky, mimicking wine producers. In this workshop we will test if geographical region has an impact on taste for whiskies as well. 
+
+3.	Do the various categories of characteristics - nose, colour, body, palate and finish - lead to the same clustering?
+
+
+But how do we obtain a quantitative assessment of similarity from the literary descriptions taste written by connoisseurs? We will use clustering algorithms that are designed to tackle such problems.
+
+"Whisky.csv" file provides data on single malt whiskies from 86 different distilleries in Scotland for Scotch that was 10 years of age, or closest to that age. 86 malt whiskies are scored between 0-4 for 12 different taste categories including sweetness, smoky, nutty etc. 
+
+
+
+
+
+## Clustering in R 
+
+<div class = "grey">
+
+This is the R Markdown document for Sessions 6 and 7 of AM04 Data Science course that contains all the functions and libraries we use in class as well as additional tools that we may not have time to cover. Please make sure you go over this document before coming to the second session during which you will use the functions in this document to determine clusters in a different data set. There are many questions and alternative implementations embedded in this document to facilitate your learning. Please go through these exercises to reinforce your understanding. This document is organized as follows.
+
+<!--begin html code: I will mark the html code in my markdown files, these are not directly related to the course material-->
+<b>Table of Contents</b>
+ 
+<ul>
+  <li>Section 1: Learning Objectives for Session 6</li>
+  <li>Section 2: Introduction</li>
+  <li>Section 3: Load and explore data</li>
+  <li>Section 4: Data Visualization </li>
+  <li>Section 5: How to run K-means clustering</li>
+  <li>Section 6: Visualizing the results of clustering algorithms</li>
+  <li>Section 7: In-Class workshop</li>
+  <li>Section 8: Determining the number of clusters</li>
+  <li>Section 9: Clustering results for Whisky Data</li>
+  <li>Section 10: Learning Objectives for Session 7</li>
+  <li>Section 11: Partitioning around medoids (Session 7)</li>
+  <li>Section 12: Hierarchical Clustering (Session 7)</li>
+</ul>  
+
+</div>
+<!--end html code-->
+
+# Whisky Data: Data Exploration and preparation 
+
+In this session we will use tasting notes for whiskies. Let's read the data and then take a look at summary statistics.
+
+```{r load-whisky-data, message=FALSE, warning=FALSE}
+
+##Data is in csv format. So I use read.csv function
+whisky <- read.csv(file="whisky.csv",header=TRUE)
+
+##let's look at the top 5 rows
+head(whisky,5)
+
+##glimpse function is useful to see a series of values in a column
+glimpse(whisky)
+
+##Finally I use the describe function to get a sense of the distribution of the values in each column
+library(Hmisc)
+describe(whisky)
+```
+
+Make sure you understand the type and scale of each variable.
+
+
+Next let's keep the tasting note columns only and then scale the data.
+```{r prepare-data, message=FALSE, warning=FALSE}
+#### focus only on tasting points and so ignore geographical coordinates
+whisky_tasting_notes<- whisky %>% select(Body:Floral)
+#### scale data: By scaling we subtract the average value of a column from each observation and divide each observation by the standard deviation of the column it belongs to
+whisky_tasting_notes<-data.frame(scale(whisky_tasting_notes))
+
+print(mean(whisky_tasting_notes$Floral))
+print(sd(whisky_tasting_notes$Floral))
+```
+
+# Data visualization
+
+Let's also see where all these distilleries are.
+
+```{r explore-1, message=FALSE, warning=FALSE, results='hide'}
+#I display the locations of the distilleries on a map. I will use ggmap and Stamen Maps. 
+#We will cover the details of this and other methods for visualizing geographical data in the data visualization course. 
+#But if you want to display a different location use "https://www.openstreetmap.org" and `export' to find the coordinates of a location.
+
+library(ggmap)
+
+#these are the coordinates I got from openstreetmap.org for Scotland
+scotlandOSM <- c(left = -9.146, bottom = 54.426, right = -0.841, top = 59.317) 
+#let's get the map for Scotland
+mapScotland<-ggmap(get_stamenmap(scotlandOSM, zoom = 8)) 
+#now add the points of the distilliries 
+mapScotland+geom_point(aes(x =lat, y = long),data=whisky,col="blue", alpha=0.8, size=1.5)
+
+```
+
+Let's look at the distribution of some of the variables. (I assume you already know how to use basic ggplots.)
+
+```{r explore-2, message=FALSE, warning=FALSE, fig.width=5, fig.height=3}
+
+
+
+ggplot(whisky_tasting_notes, aes(Medicinal)) +
+  geom_histogram(binwidth=1)
+
+
+
+
+ggplot(whisky_tasting_notes, aes(x = Sweetness)) + 
+  geom_histogram(binwidth=1)
+
+ggplot(whisky_tasting_notes, aes(Tobacco)) +
+  geom_histogram(binwidth=1)
+
+ggplot(whisky_tasting_notes, aes(Smoky)) +
+  geom_histogram(binwidth=1)
+  
+```
+
+Let's look at correlations.
+
+```{r explore-3, message=FALSE, warning=FALSE}
+
+
+# I will use the ggcorr plots in GGally package. Something you have used with Nicos.
+library("GGally")
+whisky_tasting_notes %>% 
+  select(Sweetness:Floral) %>% #keep Y variable last
+  ggcorr(method = c("pairwise", "pearson"), label_round=2, label = TRUE, angle = -90, max_size = 4,size = 3)
+
+```
+
+
+Which variables are most correlated? Based on the data description and the correlation table, are there any other variables you would like to visualize? Are there any other visualizations that might help you explore the data better?
+
+# K-means clustering 
+Find clusters using k-means with k=2. I will use `eclust` function (part of `factoextra` library) throughout the document. The most important options of `kmeans` function are `k`, number of clusters, and `nstart`, which is the number of random starts.
+
+Also check the additional options here. 
+
+(https://cran.r-project.org/web/packages/factoextra/factoextra.pdf)
+
+```{r prepare-data2, message=FALSE, warning=FALSE}
+library(factoextra)
+
+model_kmeans_2clusters<-eclust(whisky_tasting_notes, "kmeans", k = 2,nstart = 50, graph = FALSE)
+
+#Let's check the components of this object.
+summary(model_kmeans_2clusters)
+
+#Size of the clusters
+
+model_kmeans_2clusters$size
+
+
+```
+
+
+Take a look at the cluster sizes. What can you conclude?
+
+After the lecture, run `kmeans` function by setting `nstart=100`. Examine the results.
+
+```{r prepare-data3, message=FALSE, warning=FALSE, results='hide'}
+# Extract the cluster assignment vector from the kmeans model
+# add it to the original data frame
+whisky_tasting_notes_withClusters<-mutate(whisky_tasting_notes, cluster = as.factor(model_kmeans_2clusters$cluster))
+```
+
+#   Visualizing clusters
+There are a variety of methods and libraries to visualize clusters. We will look into three different methods.
+
+## Visualizing clusters by variables
+
+First I plot the positions of the points in each cluster vs two variables. Which variables should we use? Can we determine which variables are most important from this and the visualization of the centers in the next section? (Hint: The answer is yes!)
+
+```{r prepare-plot, message=FALSE, warning=FALSE}
+library(ggpubr)
+a<-ggplot(whisky_tasting_notes_withClusters, aes(x = Medicinal, y = Sweetness, color =  as.factor(cluster))) +
+  geom_jitter()+labs(color = "Cluster")
+# Note that geom_jitter adds a small noise to each observation so that we can see overlapping points
+
+b<-ggplot(whisky_tasting_notes_withClusters, aes(x = Medicinal, y = Sweetness, color = as.factor(cluster),size=Smoky)) +
+  geom_jitter()+labs(color = "Cluster")
+
+#Let's arrange these visualizations so that they fit in the html file nicely
+library(gridExtra)
+grid.arrange(a, b, nrow = 2)
+```
+
+Do you observe noticeable differences between clusters? Can you explain the differences in plain English? Which variables (among the ones we considered above) play a more prominent role in determining clusters?
+
+## Visualizing clusters - Cluster centers
+
+However plotting points vs variables is not very helpful when we have several variables, hence we need to do something different. First we look at the centers of the clusters.
+
+
+```{r prepare-cluster centers, message=FALSE, warning=FALSE}
+
+#Plot centers for k=2
+
+#First generate a new data frame with cluster centers and cluster numbers
+cluster_centers<-data.frame(cluster=as.factor(c(1:2)),model_kmeans_2clusters$centers)
+
+#transpose this data frame
+cluster_centers_t<-cluster_centers %>% gather(variable,value,-cluster,factor_key = TRUE)
+
+#plot the centers
+graphkmeans_2clusters<-ggplot(cluster_centers_t, aes(x = variable, y = value))+  geom_line(aes(color =cluster,group = cluster), linetype = "dashed",size=1)+ geom_point(size=1,shape=4)+geom_hline(yintercept=0)+theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1),)+ggtitle("K-means Centers k=2")
+
+graphkmeans_2clusters
+
+```
+
+Make sure you understand the details of the code above after the lecture. You will need them next week.
+
+Do you observe noticeable differences between clusters? Can you explain the differences in plain English? Which variables play a more prominent role in determining clusters (among the ones we considered)?
+
+## Visualizing clusters - PCA
+If we want to see where individual points from each cluster fall, instead of just cluster centers, we can use components from Principle Component Analysis (PCA). (You will discuss PCA in detail in the first session of your machine learning class.) This is especially helpful to see how well points in different clusters are separated. 
+
+```{r prepare-PCA, message=FALSE, warning=FALSE}
+
+fviz_cluster(model_kmeans_2clusters, whisky_tasting_notes, palette = "Set2", ggtheme = theme_minimal())
+```
+
+Do you observe noticeable differences between clusters? Can you explain the differences in plain English?
+
+This function has numerous options. See https://www.rdocumentation.org/packages/factoextra/versions/1.0.5/topics/fviz_cluster
+
+After the lecture, set geom="point" to add more information in the visualization.
+
+The main goal of clustering is to find actionable clusters. Visualizations help use determine if the clusters are different enough and they provide us insights. Of course what insights we are interested in depends on our eventual goal.
+
+"What are the major types of single-malt whiskies that can be recognized? What are their chief characteristics and the best representatives?"
+
+Can you answer these questions from the visualizations?
+
+
+# Exercise I 
+
+25 mins breakout room + 10 mins class discussion
+
+
+<!--begin html code: I will mark the html code in my markdown files, these are not directly related to the course material-->
+<img src="exercise 1.gif" width="300px" align="right"  style=" padding-left: 5px; padding-right: 5px; padding-bottom: 5px; padding-top: 5px;">
+
+<!--begin html code: I will mark the html code in my markdown files, these are not directly related to the course material-->
+
+<div class = "grey">
+
+<b>Instructions</b>
+
+
+The purpose of this exercise is to analyze the results of the K-means clustering method for the whisky data with a different number of clusters. 
+
+In this (unassessed) mini-workshop you will use K-means method to determine the clusters with 3 clusters and visualize the results. 
+
+You have 20 minutes to complete the workshop. If you have any questions I will be in the main room. Please leave your breakout room to ask questions. You can return to your breakout room from the main room afterwards. We will discuss your findings after the break exercise. I will randomly choose a group to share their results.
+
+
+<b>Learning objectives</b>
+ 
+<ol type="i">
+  <li>Understand the parameters of the K-means clustering algorithm.</li>
+  <li>Using different visualization techniques to investigate the results of a clustering algorithm. Specifically
+    <ol type="a">
+      <li>use individual variables vs clustering results and interpret the results</li>
+      <li>plot cluster centers and interpret the results and interpret the results</li>
+      <li>use principle components to see the separation between clusters.</li>
+    </ol>
+</ol>  
+</div>
+<!--end html code: I will mark the html code in my markdown files, these are not directly related to the course material-->
+
+<br> 
+
+<div class = "navy">
+
+<b>Steps you should follow</b>
+ 
+<ol type="i">
+  <li>Go through the data and code from the html file to familiraize yourself with the data and basic steps of k-means analysis.</li>
+  <li>Run k-means clustering algorithm with 3 clusters with the Whisky data.</li>
+  
+  
+```{r exercise-1.1, message=FALSE, warning=FALSE}
+
+#Use eclust function as above
+
+#Check the sizes of the clusters
+
+
+
+
+```
+  <li>Visualize these three clusters on `"Sweetness" and "Medicinal" values.
+
+```{r exercise-1.2, message=FALSE, warning=FALSE}
+
+
+# First extract the cluster assignment vector from the kmeans model as above
+# add it to the original data frame
+
+#Use ggplot and results of your clustering algorithm as above
+
+
+```
+    
+  <li>Visualize the center of these three clusters and compare your results with those with 2 clusters.
+
+```{r exercise-1.3, message=FALSE, warning=FALSE, fig.width=15, fig.height = 20}
+
+#Use the steps from above to visualize the centers of the clusters for k=3
+
+
+#You might want to use the following library to organize your visualization
+#library(gridExtra)
+#grid.arrange(graph1, graph1, nrow = 2)
+
+```  
+  
+  <li>Visualize these three clusters on first two principle components.
+  
+```{r exercise-1.4, message=FALSE, warning=FALSE}
+
+#Use the steps from above to visualize the separation of clusters with respect to first two components of priciple components
+
+
+
+
+```
+</ol>  
+</div>
+
+
+
+
+# Determining the Number of Clusters
+
+Now that we know how to visualize the results of clustering (these tools can be used with any clustering algorithm) and how to interpret the results, we next turn to a different question: How many clusters do we need?
+
+
+## Elbow chart
+
+The elbow chart is the most popular tool used for determining the number of clusters present in the data. Elbow charts plot the total distance from observations to their cluster centers as a function of number of clusters. 
+
+In K-Means the total distance decreases as we increase the number of clusters. In fact if we choose the number of clusters equal to number of clusters the total distance would be zero. (Why?) Therefore, there is no optimal stopping point, i.e., we cannot choose the number of clusters that minimizes the total distance. 
+
+In elbow charts we try to pick the number of clusters based on the amount the total distance decreases as we increase the number of clusters. The assumption is that the rate the total distance decreases diminishes as we increase the number of clusters. Then we try to pick the number of clusters before the decrease becomes very low. 
+
+Elbow charts do not provide a definitive answer as to what the optimal number of clusters is. However it is a good tool to determine an upper bound for the number of clusters. Recall that the most important criteria in determining the number of clusters are interpretability and actionability. Hence elbow charts are used to verify and strengthen our conclusions.
+
+First I demonstrate a detailed way of generating an elbow chart. We will see below specific functions --that are part of `factoextra` library-- built for this. Note that this method can be used with other clustering algorithms (see below for a few) as well. 
+
+```{r kmeans-elbow, message=FALSE, warning=FALSE}
+library(purrr) #a package for writing succinctfor loops
+
+# Use map_dbl to run K-Means models with varying value of k 
+tot_withinss <- map_dbl(1:10,  function(k){
+  model <- kmeans(x = whisky_tasting_notes, centers = k,iter.max = 100, nstart = 10)
+  model$tot.withinss
+})
+
+# Generate a data frame containing both k and tot_withinss
+elbow_df <- data.frame(
+  k = 1:10 ,
+  tot_withinss = tot_withinss
+)
+
+# Plot the elbow plot
+ggplot(elbow_df, aes(x = k, y = tot_withinss)) +
+  geom_line() +
+  scale_x_continuous(breaks = 1:10)
+
+#Here is a short way of producing the elbow chart using "fviz_nbclust" function. 
+fviz_nbclust(whisky_tasting_notes,kmeans, method = "wss")+
+  labs(subtitle = "Elbow method")
+```
+
+Do you see an elbow shape in the plot --where the reduction in total distance becomes considerably smaller than previous ones?
+
+## PCA visualization
+
+We can also use PCA again to compare the results of different number of clusters. 
+
+```{r kmeans-PCA number of clusters, message=FALSE, warning=FALSE}
+
+# eclust function (part of factoextra) makes it easier to visuliaze clustering results
+model_km2 <- eclust(whisky_tasting_notes, "kmeans", k = 2,nstart = 50, graph = FALSE)
+model_km2$size
+model_km3 <- eclust(whisky_tasting_notes, "kmeans", k = 3,nstart = 50, graph = FALSE)
+model_km3$size
+model_km4 <- eclust(whisky_tasting_notes, "kmeans", k = 4,nstart = 50, graph = FALSE)
+model_km4$size
+model_km5 <- eclust(whisky_tasting_notes, "kmeans", k = 5,nstart = 50, graph = FALSE)
+model_km5$size
+ 
+# plots to compare
+#I use the fviz_cluster function which is part of the`factoextra` library
+p1 <- fviz_cluster(model_km2, geom = "point", data = whisky_tasting_notes) + ggtitle("k = 2")
+p2 <- fviz_cluster(model_km3, geom = "point",  data = whisky_tasting_notes) + ggtitle("k = 3")
+p3 <- fviz_cluster(model_km4, geom = "point",  data = whisky_tasting_notes) + ggtitle("k = 4")
+p4 <- fviz_cluster(model_km5, geom = "point",  data = whisky_tasting_notes) + ggtitle("k = 5")
+
+library(gridExtra)
+grid.arrange(p1, p2,p3,p4, nrow = 2)
+
+```
+
+
+
+
+## Silhoutte analysis
+
+The Silhoutte analysis provides a succinct graphical representation of how well each object has been classified. The silhouette value is a measure of how similar an object is to its own cluster (cohesion) compared to other clusters (separation). The silhouette ranges from −1 to +1, where a high value indicates that the object is well matched to its own cluster and poorly matched to neighboring clusters. If most objects have a high value, then the clustering configuration is appropriate. If many points have a low or negative value, then the clustering configuration may have too many or too few clusters.
+
+
+```{r Silhouette Analysis, message=FALSE, warning=FALSE}
+
+#I use the fviz_silhouette function which is part of the`factoextra` library
+s2<-fviz_silhouette(model_km2)+ ggtitle(paste("k = 2", "avg sw=",format(round(model_km2$silinfo$avg.width,3))))
+s3<-fviz_silhouette(model_km3)+ ggtitle(paste("k = 3", "avg sw=",format(round(model_km3$silinfo$avg.width,3))))
+s4<-fviz_silhouette(model_km4)+ ggtitle(paste("k = 4", "avg sw=",format(round(model_km4$silinfo$avg.width,3))))
+s5<-fviz_silhouette(model_km5)+ ggtitle(paste("k = 5", "avg sw=",format(round(model_km5$silinfo$avg.width,3))))
+grid.arrange(s2, s3,s4,s5, nrow = 2)
+
+
+fviz_nbclust(whisky_tasting_notes, kmeans, method = "silhouette",k.max = 15)+labs(subtitle = "Silhouette method")
+```
+
+Unlike the elbow chart, the average silhoutte width does not have to decrease in the number of clusters. What do you observe? 
+
+
+We can also find the point which were not assinged to the nearest cluster.
+
+```{r }
+# Silhouette width of observation
+sil <- model_km3$silinfo$widths[, 1:3]
+# Objects with negative silhouette
+neg_sil_index <- which(sil[, 'sil_width'] < 0)
+sil[neg_sil_index, , drop = FALSE]
+
+```
+
+## Comparing results with different k's
+
+Let's look at the results from k=3, 4 and 5. This will help us see which clusters survive and what clusters emerge. We will use this to verify the stopping point in terms of k.
+
+```{r fig.width=10, fig.height = 10}
+#Plot centers
+#Note that I use a slightly different way of plotting the centers.
+
+#Plot centers for k=3
+xa<-data.frame(cluster=as.factor(c(1:3)),model_km3$centers)
+xa2k3<-xa %>% gather(variable,value,-cluster,factor_key = TRUE)
+
+graphknn3<-ggplot(xa2k3, aes(x = variable, y = value))+  geom_line(aes(color =cluster,group = cluster), linetype = "dashed",size=1)+ geom_point(size=1,shape=4)+geom_hline(yintercept=0)+theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1),legend.title=element_text(size=5),legend.text = element_text(size=5))+ggtitle("K-means Centers k=3")
+
+#Plot centers for k=4
+xa<-data.frame(cluster=as.factor(c(1:4)),model_km4$centers)
+
+xa4<-xa %>% gather(variable,value,-cluster,factor_key = TRUE)
+graphknn4<-ggplot(xa4, aes(x = variable, y = value))+  geom_line(aes(color = cluster,group = cluster), linetype = "dashed",size=1)+ geom_point(size=1,shape=4)+geom_hline(yintercept=0)+theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1),legend.title=element_text(size=5),legend.text = element_text(size=5))+ggtitle("K-means Centers k=4")
+
+#Plot centers for k=5
+xa<-data.frame(cluster=as.factor(c(1:5)),model_km5$centers)
+
+xa2<-xa %>% gather(variable,value,-cluster,factor_key = TRUE)
+graphknn5<-ggplot(xa2, aes(x = variable, y = value))+  geom_line(aes(color = cluster,group = cluster), linetype = "dashed",size=1)+ geom_point(size=1,shape=4)+geom_hline(yintercept=0)+theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1),legend.title=element_text(size=5),legend.text = element_text(size=5))+ggtitle("K-means Centers k=5")
+  
+
+model_km3$size
+model_km4$size
+model_km5$size
+```
+
+```{r fig.width=10, fig.height = 15}
+
+grid.arrange(graphknn3,graphknn4,graphknn5, nrow = 3)
+
+
+```
+
+As we add more clusters we discover different clusters of whiskies. By looking at the cluster centers and number of whiskies in each cluster, try to determine how many clusters we should have in our results? What can you conclude? Also check if your conclusions are in agreement with the elbow chart, and silhouette and gap statistic analysis. 
+
+
+More specifically answer the following questions:
+
+i) What clusters emerge when we increase the number of clusters?
+ 
+ii) Are these new clusters significantly different from the already existing ones?
+
+iii) What clusters remain the same when we increase the number of clusters?	
+ 
+iv) How can we use these graphs to determine which clusters are present in the data?
+
+
+# Clusters on the map
+
+Altough we may not agree on the number of clusters in this data set, I think we are in a good position to answer the second question:
+
+"What is the geographic component in our classification?"
+
+
+Let's set the number of clusters equal to 3 at investigate if there is any correlation between location and clusters. After class, check if your conclusions change when you set the number of clusters equal to 4 and 5.
+
+```{r Map Visualization, message=FALSE, warning=FALSE}
+
+
+
+mapScotland+ geom_point(aes(x =lat, y = long,color= as.factor(model_km3$cluster)),data=whisky, alpha=0.8, size=2)+labs(color = "Cluster")+scale_color_hue(l=25)
+```
+
+Does the geographical location play a role in clustering results? Can you suggest another way to check this?
+
+
+
+<!--We will cover the rest next week-->
+# Learning Objectives for Session 7
+ <div class = "grey">
+ <ol type="i">
+<li> How to use multiple cluster methods to determine meaningful clusters
+<ol type="a">
+<li> Comparing results of clustering methods
+<li> Identifying persistent clusters
+</ol>
+<li> How does PAM algorithm work?
+<ol type="a">
+<li> Objective
+<li> Inputs
+<li> Outputs
+</ol>
+<li> How does Hierarchical clustering algorithm work?
+<ol type="a">
+<li> Objective
+<li> Inputs
+<li> Outputs
+</ol>
+</ol> 
+</div>
+
+# Partitioning Around Medoids (PAM) (Session 7)
+
+The PAM method is very similar to k-means. We can implement it using the eclust function. (See the slides for technical details.) Once we obtain the results, we can use the visualization tools in a similar way we did above for k-means method. 
+
+```{r PAM Clustering, message=FALSE, warning=FALSE}
+#Let's use pam clustering. Again `k` is the number of clusters
+k=3
+k2_pam <-eclust(whisky_tasting_notes, "pam", k = k, graph = FALSE)
+#Let's see the cluster sizes
+k2_pam$medoids
+```
+In a way similar to K-means, we can visualize the results in different ways to determine the number of clusters we will use.
+
+Let's look at the centers of the clusters.
+```{r prepare-cluster centers pam, message=FALSE, warning=FALSE}
+
+
+#First generate a new data frame with cluster medoids and cluster numbers
+cluster_medoids<-data.frame(cluster=as.factor(c(1:k)),k2_pam$medoids)
+
+#transpose this data frame
+cluster_medoids_t<-cluster_medoids %>% gather(variable,value,-cluster,factor_key = TRUE)
+
+#plot medoids
+graphkmeans_3Pam<-ggplot(cluster_medoids_t, aes(x = variable, y = value))+  geom_line(aes(color =cluster,group = cluster), linetype = "dashed",size=1)+ geom_point(size=1,shape=4)+geom_hline(yintercept=0)+theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1),)+ggtitle("Pam Medoids k=3")
+
+graphkmeans_3Pam
+
+
+#We can also visualize the centers (instead of the medoids) to make a more fair comparison
+whisky_tasting_notes_withClusters<-mutate(whisky_tasting_notes, 
+                                   cluster = as.factor(k2_pam$cluster))
+
+center_locations <- whisky_tasting_notes_withClusters%>% group_by(cluster) %>% summarize_at(vars(Body:Floral),mean)
+
+#Next I use gather to collect information together
+xa2p<- gather(center_locations, key = "variable", value = "value",-cluster,factor_key = TRUE)
+
+#Next I use ggplot to visualize centers
+pamcenters<-ggplot(xa2p, aes(x = variable, y = value))+  geom_line(aes(color = cluster,group = cluster), linetype = "dashed",size=1)+ geom_point(size=2,shape=4)+geom_hline(yintercept=0)+ggtitle(paste("PAM Centers k=",k))+labs(fill = "Cluster")+theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1),legend.title=element_text(size=5),legend.text = element_text(size=5))+scale_colour_manual(values = c("darkgreen", "orange", "red","blue"))
+
+
+pamcenters
+
+## Compare it with Kmeans
+## Let me make he Kmeans graph look similar
+graphknn42<-ggplot(xa2k3, aes(x = variable, y = value))+  geom_line(aes(color = cluster,group = cluster), linetype = "dashed",size=1)+ geom_point(size=2,shape=4)+geom_hline(yintercept=0)+theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1),legend.title=element_text(size=5),legend.text = element_text(size=5))+ggtitle("K-Means Centers k=3")
+graphknn42
+
+```
+
+Do you observe significant differences between the results under PAM and K-Means. After the lecture, set the number of clusters equal to 2 and compare the results of two methods again.
+
+
+Let's visualize the results using PCA.
+
+```{r PAM Clustering visual PCA, message=FALSE, warning=FALSE}
+fviz_cluster(model_km3, data = whisky_tasting_notes) + ggtitle("K-means k = 3")+scale_colour_manual(values = c("darkgreen", "orange", "red","blue"))
+fviz_cluster(k2_pam, data = whisky_tasting_notes) + ggtitle("PAM k = 3")+scale_colour_manual(values = c("darkgreen", "orange", "red","blue"))
+```
+
+We can also use the other visualization tools with PAM results.
+
+```{r PAM Clustering visual others, message=FALSE, warning=FALSE}
+
+#Let's look at the elbow chart
+fviz_nbclust(whisky_tasting_notes,FUNcluster= cluster::pam, method = "wss")+
+  labs(subtitle = "Elbow method")
+
+#Let's look at the silhouette analysis
+fviz_silhouette(k2_pam)+ ggtitle(paste("k = 3", "avg sw=",format(round(k2_pam$silinfo$avg.width,3))))
+```
+
+
+PAM is helpful in checking the robustness of our conclusions from K-Means because it is less sensitive to outliers. Why?
+
+# Hierarchical Clustering 
+
+Finding clusters using h(ierarchical)-clustering requires a slighlty different approach than K-means and PAM;
+
+<ol type="i">
+  <li>First find the distances between points.
+  <li>Then determine how to form the clusters
+</ol>  
+
+
+```{r H-clustering Distance, message=FALSE, warning=FALSE}
+
+#dist function find the distances between points
+res.dist <- dist(whisky_tasting_notes, method = "euclidean")
+ 
+```
+Now we find the clusters using H-clustering.
+```{r H-clustering Fit, message=FALSE, warning=FALSE} 
+#Let's fit a H-Clustering methods. k is the number of clusters
+#hc_method is the distance metric H-Clustering uses. See slides for more.
+# I will set the number of clusters equal to 3 although we can do this after we find the distances.
+# hcut is also part of factoextra library
+res.hc <-  hcut(res.dist, hc_method = "ward.D",k=3)
+summary(res.hc)
+fviz_silhouette(res.hc)
+#Let's look at the size of the clusters
+res.hc$size
+#Before we look at more sophisticated ways of visualizing the results, let's first use the base plot function with the results. Base method works faster and so it's more appropriate for large treees.
+  plot(res.hc,hang = -1, cex = 0.5)
+```
+
+For larger data sets there are advanced functions to manage the computational requirements. We will not cover these methods in this class.
+
+## Visualizing results
+
+We can use the same visualizations we have with K-means but there are also some special visualization tools for H-Clustering. Let's take a look at these first.
+
+```{r H-clustering-dend, message=FALSE, warning=FALSE}
+#This visualization tool has many different options, I am only using the basic one below.
+fviz_dend(res.hc, cex = 0.5, main="ward.D",lwd = 0.5)
+```
+
+Let's look at cluster centers.
+```{r cluster centers H-clustering, message=FALSE, warning=FALSE}
+#First let's find the averages of the variables by cluster
+whisky_tasting_notes_withClusters<-mutate(whisky_tasting_notes, 
+                                   cluster = as.factor(res.hc$cluster))
+
+center_locations <- whisky_tasting_notes_withClusters%>% group_by(cluster) %>% summarize_at(vars(Body:Floral),mean)
+
+#Next I use gather to collect information together
+xa2<- gather(center_locations, key = "variable", value = "value",-cluster,factor_key = TRUE)
+
+#Next I use ggplot to visualize centers
+hclust_center<-ggplot(xa2, aes(x = variable, y = value,order=cluster))+  geom_line(aes(color = cluster,group = cluster), linetype = "dashed",size=1)+ geom_point(size=2,shape=4)+geom_hline(yintercept=0)+ggtitle("H-clust K=3")+labs(fill = "Cluster")+scale_colour_manual(values = c("darkgreen", "orange", "red","blue")) 
+## Compare it with KMeans
+hclust_center
+graphknn42
+
+```
+
+Do you observe significant differences between the results under H-clustering and K-Means. After the lecture, increase the number of clusters to 5 and compare the results of H-clustering and K-Means.
+
+
+Let's look at the PCA visualization.
+```{r H-clustering-PCA, message=FALSE, warning=FALSE}
+fviz_cluster(res.hc, whisky_tasting_notes,
+             palette = "Set2", ggtheme = theme_minimal()) + ggtitle("H-Clust k = 3")+scale_colour_manual(values = c("darkgreen", "orange", "red","blue")) 
+
+#add option geom = "point",
+```
+
+Let's look at the elbow chart.
+```{r H-clustering-elbow, message=FALSE, warning=FALSE}
+fviz_nbclust(whisky_tasting_notes, FUN = hcut, method = "wss")
+  
+```  
+
+Let's look at the Silhoutte chart.
+```{r H-clustering-Silhoutte, message=FALSE, warning=FALSE}
+fviz_silhouette(res.hc)
+```
+
+  
+
+
+```{r}
+knitr::knit_exit()
+```
+

@@ -300,18 +300,21 @@ userdatall <- userdatall %>%
 
 ```{r add one more variable}
 #Your code here
+q2 <- cleaned_BBC_Data %>% 
+  group_by(user_id) %>% 
+  summarise(avgViewPerc = mean(percentage_program_viewed))
 
 #add your results to the data frame userdatall
+userdatall <- left_join(userdatall, q2, by = "user_id")
+
+#we also create a factor variable for the type of user (light, heavy, medium) based on the number of shows to be able to see distributions amongst them.
+
+userdatall <- userdatall %>% 
+  mutate(userType = ifelse(noShows < 5, "light" , if_else(noShows >= 5 & noShows < 20, "medium", "heavy")))
+
 
 ```
  
-
-
-
-
-
-
-
 # Visualizing user-based data
 Next visualize the information captured in the user based data. Let's start with the correlations.
 
@@ -332,6 +335,10 @@ userdatall %>%
 
 ```{r}
 #Insert your code here:
+ggplot(userdatall, aes(x= noShows)) +
+  geom_density()
+ggplot(userdatall, aes(x= total_Time)) +
+  geom_histogram()
   
 ```
 

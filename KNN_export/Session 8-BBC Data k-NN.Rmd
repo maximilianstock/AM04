@@ -1,0 +1,620 @@
+---
+title: "Session 8.1 KNN: Classifying iPlayer users "
+author: "Dr Kanishka Bhattacharya"
+date: "`r Sys.Date()`"
+output:
+    html_document:
+      number_sections: true
+      highlight: haddock
+      theme: spacelab
+      toc: yes
+      toc_depth: 2
+      toc_float:
+        collapsed: false
+    
+---
+
+<style>
+div.grey { background-color:#DCDCDC; border-radius: 5px; padding: 20px; border-style: groove;}
+</style>
+<style>
+div.navy { background-color:#A2A2B6; border-radius: 5px; padding: 20px; border-style: groove; color: #ffffff;}
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r huxtable-stuff, include=FALSE}
+options("huxtable.knit_print_df" = FALSE, repos = c(CRAN = "https://cloud.r-project.org/"))
+if(!is.element("tidyverse", installed.packages()[,1]))
+{  install.packages("tidyverse")}
+
+if(!is.element("Hmisc", installed.packages()[,1]))
+{  install.packages("Hmisc")} #package for data summary using `describe`
+
+if(!is.element("ggplot2", installed.packages()[,1]))
+{  install.packages("ggplot2")} #package for plots
+if(!is.element("ggthemes", installed.packages()[,1]))
+{  install.packages("ggthemes")} #package to make fancier ggplots
+if(!is.element("caret", installed.packages()[,1]))
+{  install.packages("caret",dependencies=T)} #package to train machine learning algorithms
+if(!is.element("Metrics", installed.packages()[,1]))
+{ install.packages("Metrics")}  #package to check the performance of machine learning algorithms
+if(!is.element("factoextra", installed.packages()[,1]))
+{ install.packages("factoextra")} #package to visualize results of machine learning tools
+
+library(tidyverse)
+
+library(caret)
+library(ggplot2)
+library(Hmisc)
+```
+# Learning Objectives for Session 8
+
+
+
+ <div class = "grey">
+ <ol type="i">
+<li> K nearest neighbors (K-NN)
+<ol type="a">
+<li> Basics of the algorithm
+<li> When does it work?
+<li> Tuning the parameters
+</ol>
+<li> Comparing different supervised algorithms
+<li> Introduction to ensemble methods: What is the idea behind ensemble methods?
+<li> Classification and regression trees (see the next rmd file)
+<ol type="a">
+<li> Basics of the algorithm -- splitting and stopping rules
+<li> Visualizing results
+<li> Feature importance
+</ol>
+</ol> 
+</div>
+
+# Introduction
+ <div class = "grey">
+In this session we will predict the future usage in the BBC iPlayer data. Specifically, given users' january viewing information we will predict the likelihood of using iPlayer in february. In this document the analysis focuses om the KNN method. In the next document we will use tree based methods for the same goal and then compare these methods. 
+
+This is the R Markdown document for Session 8 of AM04 Data Science course that contains all the functions and libraries we use in class as well as additional tools that we may not have time to cover. There are many questions and alternative implementations embedded in this document to facilitate your learning. Please go through these exercises to reinforce your understanding. This document is organized as follows.
+
+<!--begin html code: I will mark the html code in my markdown files, these are not directly related to the course material-->
+<b>Table of Contents</b>
+ 
+<ul>
+  <li>Section 1: Learning Objectives for Session 8</li>
+  <li>Section 2: Introduction</li>
+  <li>Section 3: Data exploration and preprocessing</li>
+  <li>Section 4: Fitting a logistic regression model</li>
+  <li>Section 5: Implementing K-NN using caret library</li>
+  <li>Section 6: A simple ensemble method</li>
+  <li>Section 7: Fancy plots</li>
+  <li>Section 8: Using K-NN with PCA (next week)</li>
+</ul>  
+
+</div>
+<!--end html code-->
+
+
+# BBC Data
+
+
+## Preprocessing data for classification
+
+We use the user based the data we generated last week for clustering. For this session I added the view information for each user in the second month (i.e. Feb). Spefically, I have added three more columns; numberOfShows_M2, total_Time_M2, and watched_in_M2. Let's load and explore the data.
+
+```{r}
+userBasedData_raw <- read.csv(file="UserBasedData.csv",header=TRUE)
+
+
+head(userBasedData_raw,2)
+glimpse(userBasedData_raw)
+describe(userBasedData_raw)
+```
+
+
+## ICE the data: Inspect, Clean, Explore
+
+Any data science engagement starts with ICE: Inspect, Clean and Explore the data. For this workshop I have cleaned the data for you. We will look into this step in more detail in the data visualization course.
+
+```{r}
+
+
+head(userBasedData_raw,2)
+
+
+userBasedData_clean<- userBasedData_raw %>%
+  mutate(
+    watched_in_M2 = factor(watched_in_M2) # turn 'watched_in_M2' into a categorical variable
+  ) %>% 
+  dplyr::select(-numberOfShows_M2,-total_Time_M2) %>% #So let's drop the other variables that measures february usage in other ways.
+  mutate(watched_in_Feb = dplyr::recode(watched_in_M2, 
+                      "1" = "Yes", 
+                      "0" = "No"))
+    
+head(userBasedData_clean,2)
+glimpse(userBasedData_clean) #take a look at the data
+userBasedData_clean<-userBasedData_clean%>%select(-watched_in_M2,-user_id) #let's drop one of the dependent variables
+head(userBasedData_clean,2)    
+```
+
+<div class = "navy">
+The column descriptions are as follows.
+
+a)	user_id  -- a unique identifier for the viewer
+
+b)	noShows -- number oh shows viewed in january
+
+c)	total_Time -- total time spent viewing programs on BBC iPlayer in January
+
+d)	weekday/weekend -- percentage of viewing in weekday/weekend
+
+e)	Afternoon/Day/Evening/Night-- percentage of viewing in Afternoon/Day/Evening/Night
+
+f)	Children/Comedy/Drama/Entertainment/Factual/Learning/Music/News/NoGenre/RelEthics/Sport/Weather -- percentage of viewing in different genres
+
+g) per_al_Watched -- percentage of shows viewer watched more than 60% of
+
+h)	numberOfShows_M2 -- number of shows viewed in february
+
+i)  total_Time_M2 - total time spent viewing programs on BBC iPlayer in February
+
+j)  watched_in_M2 - equals 1 if user viewed a program in February
+
+
+</div>
+
+
+```{r}
+userBasedData_clean %>% 
+  skimr::skim() #skim function provides more detailed summary of the data
+```
+
+
+```{r}
+
+
+#Also let's output the resulting file for future use
+write.csv(userBasedData_clean,file="UserBasedData_S8.csv",row.names=FALSE)
+```
+
+
+
+## Explore data
+
+
+Let's explore default by creating different visualizations. We start with examining how prevalent defaults are, whether the default rate changes by loan grade or number of delinquencies, and a couple of scatter plots of defaults against loan amount and income.
+
+```{r, visualization of defaults, warning=FALSE}
+#bar chart of defaults
+def_vis1<-ggplot(data=userBasedData_clean, aes(x=watched_in_Feb)) +geom_bar(aes(y = (..count..)/sum(..count..))) + labs(x="Watched in February", y="relative frequencies") 
+def_vis1
+
+
+def_vis2<-ggplot(data=userBasedData_clean, aes(y=watched_in_Feb,x=(total_Time)))  + labs(y="Watched in February", x="Total time watched in Jan")  +geom_jitter(width=0, height=0.05, alpha=0.7) #We use jitter to offset the display of defaults/non-defaults to make the data easier to interpert. We have also changed the amount to 1000$ to reduce the number of zeros on the horizontal axis.
+
+def_vis2
+
+ggplot(userBasedData_clean, aes(x="",y=noShows)) + geom_boxplot()+labs(x="", y= "Number of Shows Watched")
+ggplot(userBasedData_clean, aes(x=noShows)) +geom_histogram(binwidth=1)+xlim(0,100)+labs(x="Number of Shows Watched", y= "Count")
+ggplot(userBasedData_clean, aes(x="",y=total_Time)) + geom_boxplot()+labs(x="", y= "Total Time Watched (mins)")
+ggplot(userBasedData_clean, aes(x=total_Time)) +geom_histogram(binwidth=1)+xlim(0,100)+labs(x="", y= "Total Time Watched (mins)")
+
+def_vis3<-ggplot(data=userBasedData_clean, aes(y=watched_in_Feb,x=I(log(total_Time))))  + labs(y="Watched in February", x="log_Total time watched in Jan")  +geom_jitter(width=0, height=0.05, alpha=0.7) #We use jitter to offset the display of defaults/non-defaults to make the data easier to interpert. We have also changed the amount to 1000$ to reduce the number of zeros on the horizontal axis.
+
+def_vis3
+
+
+def_vis4<-ggplot(data=userBasedData_clean, aes(y=watched_in_Feb,x=weekend))  + labs(y="Watched in February", x="Weekend %")  +geom_jitter(width=0, height=0.05, alpha=0.7) #We use jitter to offset the display of defaults/non-defaults to make the data easier to interpert. We have also changed the amount to 1000$ to reduce the number of zeros on the horizontal axis.
+
+def_vis4
+
+
+```
+
+## Data preparation
+
+Also the total time watched and number of shows watched  data are highly skewed. This might create problems for regression methods so I will log-transform them to reduce spread.
+
+```{r log tranform}
+userBasedData_clean<- userBasedData_clean %>%
+  mutate(
+    log_total_Time = log(total_Time), # log transform total time
+    log_number_of_shows = log(noShows)
+    ) %>%
+    select(-total_Time,-noShows)
+
+  
+glimpse(userBasedData_clean)
+```  
+
+Since this is a supervised learning task, let's split the data into training and validation before we train our algorithms.
+
+
+
+```{r split data}
+library(rsample) #you have
+set.seed(1212)
+
+train_test_split <- initial_split(userBasedData_clean, prop = 0.75) #training set contains 75% of the data
+# Create the training and testing datasets
+combined_train <- training(train_test_split)
+combined_test <- testing(train_test_split)
+
+```
+
+
+
+# A logistic regression model
+
+Let's fit a logistic regression model for comparison purposes. I will fit a simple logistic regression model by using a subset of the variables, you can also try to improve the model with variable selection methods. 
+
+
+
+```{r,warning=FALSE,  message=FALSE  }
+# I will use 'glm' function but you can also use the 'caret' library.
+# Also I will not use any variable selection methods but I will leave this to you as exercise
+bbc_logreg_Fit<-glm(formula=watched_in_Feb  ~Day+log_total_Time+log_number_of_shows , data = combined_train,family = "binomial")
+summary(bbc_logreg_Fit)
+
+
+# Next I predict the probabilities and then plot the ROC curve. 
+watched_prob<- bbc_logreg_Fit%>% predict(combined_test, type = "response")
+
+
+library(pROC)
+ROC_lr <- roc(combined_test$watched_in_Feb, watched_prob)
+# Calculate the area under the curve (AUC)
+AUC_lr<-round(auc(ROC_lr)*100, digits=2)
+# Plot the ROC curve
+ggroc(ROC_lr) + theme_bw()+ggtitle(paste("LogReg BBC-Data AUC (validation) =",AUC_lr,"%",sep = "")) +
+geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed")+geom_segment(aes(x = 1, xend = 1, y = 0, yend = 1), color="black", linetype="dashed")+geom_segment(aes(x = 1, xend = 0, y = 1, yend = 1), color="black", linetype="dashed")
+
+
+```
+
+
+
+>Exercise: Improve the performance of the logistic regression model using tools you have learned in Data Science I. How much can you improve ROC?
+
+
+
+# Implementing KNN using `caret`
+
+Now we are ready to train our KNN algorithm. I will demonstrate a simple implementation but you should experiment with different values for the "K" parameter and assess its impact on the predictive accuracy of the algorithm.
+
+Let's start with a simple implementation. Please make sure you understand this code before you proceed to more sophisticated way of tuning parameters. Recall that the only tunable parameter is the number of neighbors.
+
+The defacult accuracy metric `caret` uses for classification is accuracy. 
+
+>Exercise: What might go wrong if we only focus on this metric to assess the performance of a classification algorithm?
+
+```{r}
+set.seed(3333) #I will use cross validation. To be able to replicate the results I set the seed to a fixed number
+
+# Below I use 'train' function from caret library. 
+# 'preProcess': I use this option to center and scale the data
+# 'method' is knn
+# dfeault 'metric' is accuracy
+
+knn_fit <- train(watched_in_Feb~., data=combined_train, 
+                 method = "knn",
+                 trControl = trainControl("cv", number = 10), #use cross validation with 10 data points
+                 tuneLength = 10, #number of parameter values train function will try
+                 preProcess = c("center", "scale"))  #center and scale the data in k-nn this is pretty important
+
+knn_fit
+plot(knn_fit) #we can plot the results
+
+
+
+```
+
+
+We observe that the accuracy of the algorithm increases with # of neighbors. Let's increase the number of neighbors we consider and switch the metric to `auc`.
+
+```{r}
+
+suppressMessages(library(caret))
+modelLookup("knn") #It is always a good idea to check the tunable parameters of an algorithm
+
+# I will store the values of k I want to experiment with in knnGrid
+
+knnGrid <-  expand.grid(k= seq(20,100 , by = 10)) 
+
+#I will use AUC to choose the best k, hence we need the class probabilities. I will use cross-validation with 10 subsets
+control <- trainControl(method="cv", 
+                        number=5, 
+                        classProbs=TRUE, 
+                        summaryFunction=twoClassSummary)
+
+# By fixing the see I can re-generate the results when needed
+set.seed(7)
+# Below I use 'train' function from caret library. 
+# 'preProcess': I use this option to center and scale the data
+# 'method' is knn
+# 'metric' is ROC or AUC
+# I already defined the 'trControl' and 'tuneGrid' options above
+fit_KNN <- train(watched_in_Feb~., data=combined_train,
+                 preProcess = c("center", "scale"), 
+                 method="knn", 
+                 metric="ROC", 
+                 trControl=control,
+                 tuneGrid = knnGrid)
+# display results
+print(fit_KNN)
+# plot results
+plot(fit_KNN)
+
+```
+
+Next I check the performance of the best model on the test data. First let's examine the confusion matrix. 
+
+>Exercise: How did kNN perform compared to logistic regression? 
+
+>Exercise: After the lecture, run knn without scaling and centering the data. How does it perform?
+
+```{r}
+#Predict the class of each user in the test data set
+#Recall that the output of 'train' function, in this case 'fit_KNN', automatically keeps the best model
+# 'predict' function has many options. Here I am using it to classify new data as 0 or 1 using  'cutoff' value equal to 0.5. 
+knn_class<-predict(fit_KNN, newdata = combined_test, cutoff = .5 )
+
+###Look at the confusion matrix using 'confusionMatrix' from 'caret' library
+confusionMatrix(data = knn_class,reference = combined_test$watched_in_Feb) 
+
+```
+
+Next I plot the ROC curve for the test data.
+```{r}
+
+#Load the library pROC to plot ROC curves
+suppressMessages(library(pROC))
+
+# I use 'predict' function to estimate probabilities. The result has two columns; first the probabilty of being class 0 and second # for being 1. So I take the second column 
+
+knn_prediction_testing<-predict(fit_KNN, newdata = combined_test,type = "prob")[,2]
+
+# Let's find the ROC values using 'roc' function from pROC. 
+ROC_knn <- roc(combined_test$watched_in_Feb, knn_prediction_testing)
+# Let's find AUC using the 'auc' function and round it for ease of notation. 
+AUC_knn<-round(auc(ROC_knn)*100, digits=2)
+# Finally let's plot the ROC curve using
+ggroc(ROC_knn) + theme_bw()+ggtitle(paste("k-NN BBC-Data AUC=",AUC_knn,"%"))+geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed")
+```
+
+>Exercise: How does K-NN perform relative to the basic logistic regression model? Plot two ROC charts to compare (something you have done when you compared different logistic regression methods).
+
+
+## Other libraries in R (Side note)
+
+We can also use the 'class' package and 'knn' function, here is the link 
+https://www.rdocumentation.org/packages/class/versions/7.3-15/topics/knn
+
+Although it may seem that this function has a simpler syntax, it requires a lot of pre and post processing to 
+train the K-NN algorithm and it does not provide an easy way of tuning the "k" parameter. Hence I prefer using the `caret` library.
+
+Another library that implement `knn` with weighted distances is the `kknn` function. You can use this function with `caret` as well. Here is the link for this function.
+https://www.rdocumentation.org/packages/kknn/versions/1.3.1/topics/kknn
+
+# A simple ensemble method
+
+There are many ways to merge classification algorithms to improve their performance. We will see a variety of ways to do this this and next week. 
+
+A simple way to "ensemble" different machnine learning algorithms is to use the predictions of a machone Learning algorithms as independent variable in another. I demonstrate this below by adding the results of k-NN to independent variables in logistic regression.
+
+>Exercise: How can we use the results of clustering in a similar ensemble method? 
+
+
+
+```{r find clusters}
+knn_prediction_training<-predict(fit_KNN, newdata = combined_train,type = "prob")[,2]
+#I set the number of clusters equal to 4
+combined_train<-combined_train%>%mutate(knn_Predict=knn_prediction_training)
+combined_test<-combined_test%>%mutate(knn_Predict=knn_prediction_testing)
+
+glimpse(combined_test)
+
+```
+
+Train a logistic regression model with results from knn and clustering.
+```{r run log reg ensemble}
+
+#train a logistic regression model
+bbc_logreg_Fit_ens<-glm(formula=watched_in_Feb  ~ Day+log_total_Time+log_number_of_shows+knn_Predict , 
+                    data = combined_train,family = "binomial")
+summary(bbc_logreg_Fit_ens)
+
+
+
+# Next I predict the probabilities and then plot the ROC curve for the testing data. 
+knn_prediction_testing<- bbc_logreg_Fit_ens%>%predict(combined_test,type = "response")
+
+
+library(pROC)
+ROC_lr2 <- roc(combined_test$watched_in_Feb, knn_prediction_testing)
+# Calculate the area under the curve (AUC)
+AUC_lr2<-round(auc(ROC_lr2)*100, digits=2)
+# Plot the ROC curve
+g2 <- ggroc(list("LR"=ROC_lr,"LR with KNN"=ROC_lr2))
+g2+ggtitle(paste("AUC LR=",AUC_lr,"%"," vs AUC LR with K-NN input=",AUC_lr2,"%",sep="" ))+geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed")
+
+
+```
+
+
+
+# Fancy plots
+
+Next I demonstrate how the probabilities based on the actual classes (i.e., watched or not) can be visualized.
+
+```{r}
+library(ggthemes)
+
+#First I plot the performance on the testing data
+g1<-ggplot( combined_test, aes( knn_prediction_testing, color = watched_in_Feb)  ) + 
+  geom_density( size = 1 ) +
+  ggtitle( "Test Set's Predicted Score  (cdf)" ) +
+  scale_color_economist( name =  "Watched in February?", labels = c( "No", "Yes" ) ) +
+  theme_economist()+xlab("Estimated Probability")
+
+#Now I plot the performance on the whole data
+knn_prediction_training<- predict(fit_KNN, newdata = combined_train,type = "prob")[,2]
+
+g2<-ggplot( combined_train, aes( knn_prediction_training, color = watched_in_Feb ) ) +
+ geom_density( size = 1 ) +
+ ggtitle( "Train Set's Predicted Score (pdf)" ) +
+ scale_color_economist( name = "Watched in February?", labels = c( "No", "Yes" ) ) +
+ theme_economist()+xlab("Estimated Probability")
+
+g2
+g1
+
+
+#We can also plot the cumulative distribution
+ggplot( combined_test, aes( watched_prob, color = watched_in_Feb ) ) +
+ stat_ecdf( size = 1 ) +
+ ggtitle( "Test Set's Predicted Score (cdf)" ) +
+ xlab("Estimated Probability")
+
+
+```
+
+
+# Using KNN with PCA 
+
+As I mentioned in class the performance of KNN is very sensitive to the number of features in the data. This may especially be a concern when we have a lot of features. If we are dealing with large data sets, we might want to reduce the dimension of the data set to improve performance. Next I find the principal components of BBC data and then implement KNN using these components instead of the original variables.
+
+
+## Running PCA on the BBC Data
+```{r split data pca}
+#Let's delete the nonnumeric column and the dependent variable before we apply PCA
+combined_nn_pca<-userBasedData_clean%>% select(-c(watched_in_Feb))
+####Let's first generate training and test data sets
+#I will use the same seed we used for base knn. This allows me to do a fair comparison below.
+set.seed(1212)
+
+train_test_split <- initial_split(combined_nn_pca, prop = 0.75) #training set contains 75% of the data
+# Create the training dataset
+combined_train_pca <- training(train_test_split)
+# Create the test dataset
+combined_test_pca <- testing(train_test_split)
+head(combined_test_pca)
+```
+
+```{r find PCs}
+#Next find the principle components on training data
+BBC.pca <- prcomp(combined_train_pca, center = TRUE,scale. = TRUE)
+summary(BBC.pca)
+#visualize the components using 'factoextra' library, which we also used in cluster analysis
+suppressMessages(library(factoextra))
+fviz_eig(BBC.pca)
+#Get the components for each record in training data
+training_pca<-predict(BBC.pca,combined_train_pca)
+#Choose a subset of the components.
+pca_reduced_training<-data.frame(training_pca[,1:15])
+#Copy the dependent variable.
+pca_reduced_training$watched_in_Feb<-combined_train$watched_in_Feb
+```
+
+## Running KNN with PCA data
+
+Next I run KNN in the new data set. Steps are identical to those above. 
+
+
+```{r run knn with pca}
+
+knnGrid_pca <-  expand.grid(k= seq(5,100 , by = 10)) 
+
+fitPCA <- train(watched_in_Feb~., data=pca_reduced_training, method="knn", metric="ROC", trControl=control,tuneGrid = knnGrid_pca)
+# display results
+print(fitPCA)
+ggplot(fitPCA) + theme_bw()
+
+###Let's test the performance of the best model on the test data
+pca_reduced_testPCA<-predict(BBC.pca,combined_test_pca)
+#Choose a subset of the components.
+pca_reduced_testing<-data.frame(pca_reduced_testPCA[,1:15])
+#Copy the dependent variable.
+pca_reduced_testing$watched_in_Feb<-combined_test$watched_in_Feb
+
+a<-predict(fitPCA, newdata = pca_reduced_testing, cutoff = .5 )
+
+###Examine the confusion matrix
+confusionMatrix(data = a,reference = pca_reduced_testing$watched_in_Feb) 
+
+###Let's look at the ROC
+a<-predict(fitPCA, newdata = pca_reduced_testing,type = "prob")[,2]
+ROC <- roc(pca_reduced_testing$watched_in_Feb, a)
+# Plot the ROC curve
+# Plot the ROC curve
+
+g <- ggroc(ROC)
+AUC_PCA=round(ROC$auc*100, digits=2)
+AUC_PCA
+g + theme_bw() +ggtitle(paste("AUC with PCA=",AUC_PCA,"%",sep="")) + 
+  geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed")
+```
+
+Did using PCA help improve the performance of KNN? Why or why not? How should we choose the number of PCA components we use with KNN? Write the code to implement your idea, see the last section in this document.
+
+Finally let's compare the performance of KNN models with and without PCA
+
+```{r}
+g2 <- ggroc(list("KNN with PCA"=ROC, "Original Data"=ROC_knn))
+g2+ggtitle(paste("AUC PCA=",AUC_PCA,"%"," vs AUC Original Data=",AUC_knn,"%",sep="" ))+geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed")
+
+```
+
+>Exercise: Re-fit a logistic regression model using all PCA components. How does it perform?
+
+
+## Tuning the number of principle components to use 
+
+In this section I show how you can also tune the number of principle components you can use with K-NN. I use `caret` libraries functions. Specifically, I test the performance of k-nn when different number of principle components are used as independent variables.
+
+```{r tuning number of pcs}
+
+
+#set the search grid for k
+knnGrid <-  expand.grid(k= seq(5,40, by = 5)) 
+
+#I will save the search results in the following data frame
+results<- data.frame(matrix(ncol = 3, nrow = 0))
+#Below I change the number of Principle components in a for loop
+# For each chosen number I find the best k using train function
+#Then I save the result in the data frame "results"
+x <- c("Num_of_PCA", "AUC", "k")
+colnames(results) <- x
+
+#I will run number of pc's from 5 to 15
+for(pca in 10:21)
+{
+  
+ #find the pca's
+    a<-preProcess(combined_train_pca, method = "pca",pcaComp = pca)
+    #apply them to the training data
+    trainbc<-predict(a,combined_train_pca)
+    #copy the watched_in_M2 variable
+    trainbc$watched_in_Feb<-combined_train$watched_in_Feb
+    
+    #find best k using train function
+    fit_KNN2<- train(watched_in_Feb~., data=trainbc, 
+                 method="knn", metric="ROC", trControl=control,tuneGrid = knnGrid)
+# display results
+    AUC=max(fit_KNN2$results$ROC)
+    k=fit_KNN2$results$k[which.max(fit_KNN2$results$ROC)]
+    a<-data.frame(pca,AUC,k)
+    results<-rbind(results,a)
+}
+ggplot(data=results,aes(pca,AUC)) + geom_line()
+
+
+```
+
+>Exercise: Re-fit knn with the best value you identified for number of principle components and number of neighbors. Then check the performance of this best model in testing data and compare it to logistic regression.
+
+

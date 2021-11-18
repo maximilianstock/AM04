@@ -571,24 +571,13 @@ Your code here.
 
 ```{r }
 #Fit kmeans models
-#your code here
-
-```
-
-```{r fit kmean k3}
-#train kmeans clustering
 KMeans3Clusters <- eclust(kMeansUserdatall, "kmeans", k = 3,nstart = 50, graph = FALSE)
 KMeans4Clusters <- eclust(kMeansUserdatall, "kmeans", k = 4,nstart = 50, graph = FALSE)
 KMeans5Clusters <- eclust(kMeansUserdatall, "kmeans", k = 5,nstart = 50, graph = FALSE)
-
 ```
 
-## Visualizing the results
-
-### Cluster centers 
-Plot the normalized cluster centers. Try to describe the clusters that the algorithm suggests. 
-
-```{r cluster centers}
+```{r fig.width=7, fig.height = 12}
+#Plot centers
 #your code here
 
 #First generate a new data frame with cluster centers and cluster numbers
@@ -608,7 +597,8 @@ ggplot(userClusterCentersTransposed3, aes(x = variable, y = value)) +
   geom_hline(yintercept=0) +
   theme_bw() +
   theme(text = element_text(size=10),
-        axis.text.x = element_text(angle=45, hjust=1),)
+        axis.text.x = element_text(angle=45, hjust=1),) +
+  labs(subtitle = paste("Cluster 1:", KMeans3Clusters$size[1], "\nCluster 2:",KMeans3Clusters$size[2], "\nCluster 3:", KMeans3Clusters$size[3]))
 
 ggplot(userClusterCentersTransposed4, aes(x = variable, y = value)) +
   geom_line(aes(color = cluster, group = cluster),  size = 1)+
@@ -616,7 +606,8 @@ ggplot(userClusterCentersTransposed4, aes(x = variable, y = value)) +
   geom_hline(yintercept=0) +
   theme_bw() +
   theme(text = element_text(size=10),
-        axis.text.x = element_text(angle=45, hjust=1),)
+        axis.text.x = element_text(angle=45, hjust=1),) +
+  labs(subtitle = paste("Cluster 1:", KMeans4Clusters$size[1], "\nCluster 2:",KMeans4Clusters$size[2], "\nCluster 3:", KMeans4Clusters$size[3], "\nCluster 4:", KMeans4Clusters$size[4]))
 
 ggplot(userClusterCentersTransposed5, aes(x = variable, y = value)) +
   geom_line(aes(color = cluster, group = cluster),  size = 1)+
@@ -625,47 +616,7 @@ ggplot(userClusterCentersTransposed5, aes(x = variable, y = value)) +
   theme_bw() +
   theme(text = element_text(size=10),
         axis.text.x = element_text(angle=45, hjust=1),) +
-  labs(subtitle = paste("Cluster Sizes: Cluster 1:", KMeans5Clusters$size[1], "Cluster 2:",KMeans5Clusters$size[2], "Cluster 3:", KMeans5Clusters$size[3], "Cluster 4:", KMeans5Clusters$size[4], "Cluster 5:", KMeans5Clusters$size[5]))
-
-```
-
-Can you interpret each cluster from this plot? Did you arrive at meaningful clusters?
-
-How can you use the cluster information to improve the viewer experience with BBC iPlayer? We will come back to these points below. However it is important to think about these issues at the beginning.
-
-
-### Clusters vs variables
-
-Plot a scatter plot for the viewers with respect to total_Time and weekend variables with color set to the cluster number of the user. What do you observe? Which variable seems to play a more prominent role in determining the clusters of users?
-
-```{r distribution wrt. variables}
-#your code here
-ggplot(kMeansUserdatallWithClusters, aes(x = total_Time, y = weekend, color =  as.factor(cluster))) +
-  geom_jitter() + 
-  labs(color = "Cluster") +
-  theme_bw()
-```
-
-### Clusters vs PCA components
-
-Repeat the previous step and use the first two principle components using `fviz_cluster` function.
-```{r cluster centers 3}
-
-
-
-```
-
-```{r }
-#PCA visualizations
-fviz_cluster(KMeans3Clusters, userdatall, palette = "Set2", ggtheme = theme_bw(), geom="point", pointsize = 0.5)
-
-
-```
-
-```{r fig.width=7, fig.height = 12}
-#Plot centers
-#your code here
-
+  labs(subtitle = paste("Cluster 1:", KMeans5Clusters$size[1], "\nCluster 2:",KMeans5Clusters$size[2], "\nCluster 3:", KMeans5Clusters$size[3], "\nCluster 4:", KMeans5Clusters$size[4], "\nCluster 5:", KMeans5Clusters$size[5]))
 
 
 ```

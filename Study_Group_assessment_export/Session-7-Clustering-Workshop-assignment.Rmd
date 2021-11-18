@@ -378,7 +378,6 @@ Also display the cluster sizes. See the RMarkdown file from the last session to 
 Use `summary("kmeans Object")` to examine the components of the results of the clustering algorithm. How many points are in each cluster?
 
 ```{r fit kmean k2}
-
 k=2
 # Get rid of variables that you might not need. Do not include no shows as well because it is highly correlated with total time
 
@@ -389,19 +388,24 @@ kMeansUserdatall <- userdatall %>%
 
 #log transform total time to reduce the impact of outliers 
 kMeansUserdatall <- kMeansUserdatall %>% 
-  mutate(total_Time = log(total_Time, 10))
-
+  mutate(total_Time = log(total_Time))
 
 #scale the data
+kMeansUserdatall <- data.frame(scale(kMeansUserdatall))
 
-
-#train kmeans clustering
-
-#add clusters to the data frame
-
-
+sd(kMeansUserdatall$total_Time) #lets see if the scaling worked by looking at the standard deviation of, e.g., total_Time
 ```
 
+
+
+```{r fit kmean k2}
+#train kmeans clustering
+KMeans2Clusters <- eclust(kMeansUserdatall, "kmeans", k = 2,nstart = 50, graph = FALSE)
+
+#add clusters to the data frame
+userdatallWithClusters <- mutate(userdatall, cluster = as.factor(KMeans2Clusters$cluster))
+kMeansUserdatallWithClusters <- mutate(kMeansUserdatall, cluster = as.factor(KMeans2Clusters$cluster))
+```
 
 ## Visualizing the results
 
@@ -410,6 +414,23 @@ Plot the normalized cluster centers. Try to describe the clusters that the algor
 
 ```{r cluster centers}
 #your code here
+
+#First generate a new data frame with cluster centers and cluster numbers
+userClusterCenters <- data.frame(cluster = as.factor(c(1:2)), KMeans2Clusters$centers)
+
+#transpose this data frame
+userClusterCentersTransposed <- userClusterCenters %>% gather(variable,value,-cluster,factor_key = TRUE)
+
+graphUserClusters <- ggplot(userClusterCentersTransposed, aes(x = variable, y = value)) +
+  geom_line(aes(color = cluster, group = cluster),  size = 1)+
+  geom_point(size=1,shape=4) + 
+  geom_hline(yintercept=0) +
+  theme_bw() +
+  theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1),)
+
+graphUserClusters
+
 
 ```
 
@@ -424,17 +445,21 @@ Plot a scatter plot for the viewers with respect to total_Time and weekend varia
 
 ```{r distribution wrt. variables}
 #your code here
-
+ggplot(kMeansUserdatallWithClusters, aes(x = total_Time, y = weekend, color =  as.factor(cluster))) +
+  geom_jitter() + 
+  labs(color = "Cluster") +
+  theme_bw()
 ```
 
 ### Clusters vs PCA components
 
 Repeat the previous step and use the first two principle components using `fviz_cluster` function.
 ```{r cluster centers 2}
-#your code here
+
+fviz_cluster(KMeans2Clusters, userdatall, palette = "Set2", ggtheme = theme_bw(), geom="point", pointsize = 0.5)
+
+
 ```
-
-
 
 ### Clusters vs PCA components without log transform
 
@@ -442,8 +467,69 @@ As a "side exercise", use K-means method again but this time do not log transfor
 
 ```{r cluster centers without log transform}
 #your code here
+kMeansUserdatallOutliers <- userdatall %>% 
+  select(-c("user_id", "userType")) %>% 
+  replace(is.na(.), 0)
 ```
 
+```{r cluster centers without log transform}
+#scale the data
+kMeansUserdatallOutliers <- data.frame(scale(kMeansUserdatallOutliers))
+
+sd(kMeansUserdatallOutliers$total_Time) #lets see if the scaling worked by looking at the standard deviation of, e.g., total_Time
+```
+
+
+
+```{r fit kmean k3}
+#train kmeans clustering
+KMeans2ClustersOutliers <- eclust(kMeansUserdatallOutliers, "kmeans", k = 2,nstart = 50, graph = FALSE)
+
+#add clusters to the data frame
+kMeansUserdatallWithClustersOutliers <- mutate(kMeansUserdatallOutliers, cluster = as.factor(KMeans2ClustersOutliers$cluster))
+```
+
+
+```{r cluster centers}
+#your code here
+
+#First generate a new data frame with cluster centers and cluster numbers
+userClusterCentersOutliers <- data.frame(cluster = as.factor(c(1:2)), KMeans2ClustersOutliers$centers)
+
+#transpose this data frame
+userClusterCentersTransposedOutliers <- userClusterCentersOutliers %>% gather(variable,value,-cluster,factor_key = TRUE)
+
+graphUserClustersOutliers <- ggplot(userClusterCentersTransposedOutliers, aes(x = variable, y = value)) +
+  geom_line(aes(color = cluster, group = cluster),  size = 1)+
+  geom_point(size=1,shape=4) + 
+  geom_hline(yintercept=0) +
+  theme_bw() +
+  theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1),)
+
+graphUserClustersOutliers
+
+
+```
+
+
+```{r distribution wrt. variables}
+#your code here
+ggplot(kMeansUserdatallWithClustersOutliers, aes(x = total_Time, y = weekend, color =  as.factor(cluster))) +
+  geom_jitter() + 
+  labs(color = "Cluster") +
+  theme_bw()
+```
+
+### Clusters vs PCA components
+
+Repeat the previous step and use the first two principle components using `fviz_cluster` function.
+```{r cluster centers 2}
+
+fviz_cluster(KMeans2ClustersOutliers, userdatall, palette = "Set2", ggtheme = theme_bw(), geom="point", pointsize = 0.5)
+
+
+```
 
 Do you observe any outliers? 
 
@@ -454,7 +540,10 @@ Produce an elbow chart and identify a reasonable range for the number of cluster
 
 
 ```{r elbow}
-#your code here
+
+#Here is a short way of producing the elbow chart using "fviz_nbclust" function. 
+fviz_nbclust(kMeansUserdatall,kmeans, method = "wss", k.max = 20)+
+  labs(subtitle = "Elbow method")
 
 ```
 
@@ -463,7 +552,8 @@ Produce an elbow chart and identify a reasonable range for the number of cluster
 Repeat the previous step for Silhouette analysis.
 
 ```{r Silhouette}
-#your code here
+fviz_nbclust(kMeansUserdatall, kmeans, method = "silhouette",k.max = 20)
+
 ```
 
 
@@ -485,9 +575,89 @@ Your code here.
 
 ```
 
+```{r fit kmean k3}
+#train kmeans clustering
+KMeans3Clusters <- eclust(kMeansUserdatall, "kmeans", k = 3,nstart = 50, graph = FALSE)
+KMeans4Clusters <- eclust(kMeansUserdatall, "kmeans", k = 4,nstart = 50, graph = FALSE)
+KMeans5Clusters <- eclust(kMeansUserdatall, "kmeans", k = 5,nstart = 50, graph = FALSE)
+
+```
+
+## Visualizing the results
+
+### Cluster centers 
+Plot the normalized cluster centers. Try to describe the clusters that the algorithm suggests. 
+
+```{r cluster centers}
+#your code here
+
+#First generate a new data frame with cluster centers and cluster numbers
+userClusterCenters3 <- data.frame(cluster = as.factor(c(1:3)), KMeans3Clusters$centers)
+userClusterCenters4 <- data.frame(cluster = as.factor(c(1:4)), KMeans4Clusters$centers)
+userClusterCenters5 <- data.frame(cluster = as.factor(c(1:5)), KMeans5Clusters$centers)
+
+#transpose this data frame
+userClusterCentersTransposed3 <- userClusterCenters3 %>% gather(variable,value,-cluster,factor_key = TRUE)
+userClusterCentersTransposed4 <- userClusterCenters4 %>% gather(variable,value,-cluster,factor_key = TRUE)
+userClusterCentersTransposed5 <- userClusterCenters5 %>% gather(variable,value,-cluster,factor_key = TRUE)
+
+
+ggplot(userClusterCentersTransposed3, aes(x = variable, y = value)) +
+  geom_line(aes(color = cluster, group = cluster),  size = 1)+
+  geom_point(size=1,shape=4) + 
+  geom_hline(yintercept=0) +
+  theme_bw() +
+  theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1),)
+
+ggplot(userClusterCentersTransposed4, aes(x = variable, y = value)) +
+  geom_line(aes(color = cluster, group = cluster),  size = 1)+
+  geom_point(size=1,shape=4) + 
+  geom_hline(yintercept=0) +
+  theme_bw() +
+  theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1),)
+
+ggplot(userClusterCentersTransposed5, aes(x = variable, y = value)) +
+  geom_line(aes(color = cluster, group = cluster),  size = 1)+
+  geom_point(size=1,shape=4) + 
+  geom_hline(yintercept=0) +
+  theme_bw() +
+  theme(text = element_text(size=10),
+        axis.text.x = element_text(angle=45, hjust=1),) +
+  labs(subtitle = paste("Cluster Sizes: Cluster 1:", KMeans5Clusters$size[1], "Cluster 2:",KMeans5Clusters$size[2], "Cluster 3:", KMeans5Clusters$size[3], "Cluster 4:", KMeans5Clusters$size[4], "Cluster 5:", KMeans5Clusters$size[5]))
+
+```
+
+Can you interpret each cluster from this plot? Did you arrive at meaningful clusters?
+
+How can you use the cluster information to improve the viewer experience with BBC iPlayer? We will come back to these points below. However it is important to think about these issues at the beginning.
+
+
+### Clusters vs variables
+
+Plot a scatter plot for the viewers with respect to total_Time and weekend variables with color set to the cluster number of the user. What do you observe? Which variable seems to play a more prominent role in determining the clusters of users?
+
+```{r distribution wrt. variables}
+#your code here
+ggplot(kMeansUserdatallWithClusters, aes(x = total_Time, y = weekend, color =  as.factor(cluster))) +
+  geom_jitter() + 
+  labs(color = "Cluster") +
+  theme_bw()
+```
+
+### Clusters vs PCA components
+
+Repeat the previous step and use the first two principle components using `fviz_cluster` function.
+```{r cluster centers 3}
+
+
+
+```
+
 ```{r }
 #PCA visualizations
-#your code here
+fviz_cluster(KMeans3Clusters, userdatall, palette = "Set2", ggtheme = theme_bw(), geom="point", pointsize = 0.5)
 
 
 ```

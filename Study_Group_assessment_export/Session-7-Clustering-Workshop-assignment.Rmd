@@ -313,6 +313,8 @@ userdatall <- userdatall %>%
   mutate(userType = ifelse(noShows < 5, "light" , if_else(noShows >= 5 & noShows < 20, "medium", "heavy")))
 
 
+userdatall <- userdatall %>%
+  mutate(userType = factor(userType, levels = c("light", "medium", "heavy")))
 ```
  
 # Visualizing user-based data

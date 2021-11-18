@@ -382,11 +382,14 @@ Use `summary("kmeans Object")` to examine the components of the results of the c
 k=2
 # Get rid of variables that you might not need. Do not include no shows as well because it is highly correlated with total time
 
-userdatall %>% userdatall %>% 
-  select(-c("user_id"))
+kMeansUserdatall <- userdatall %>% 
+  select(-c("user_id", "noShows", "userType")) %>% 
+  replace(is.na(.), 0)
 
 
 #log transform total time to reduce the impact of outliers 
+kMeansUserdatall <- kMeansUserdatall %>% 
+  mutate(total_Time = log(total_Time, 10))
 
 
 #scale the data

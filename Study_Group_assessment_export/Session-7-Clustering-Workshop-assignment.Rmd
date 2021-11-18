@@ -277,8 +277,21 @@ userdatall<-left_join(userdatall,userData4,by="user_id")
 
 ```{r percentage by genre}
 #Your code here
+q1 <- cleaned_BBC_Data %>% 
+  group_by(user_id, genre) %>% 
+  mutate(nGenre = n()) %>% 
+  ungroup() %>% 
+  group_by(user_id) %>% 
+  mutate(nTotal = n(), shareGenre = nGenre/nTotal) %>% 
+  group_by(user_id, genre, shareGenre) %>% 
+  summarise()
+
 
 #add your results to the data frame userdatall
+
+userdatall <- left_join(userdatall, q1, by = "user_id")
+userdatall <- userdatall %>% 
+  pivot_wider(names_from = genre, values_from = shareGenre)
 
 ```
 

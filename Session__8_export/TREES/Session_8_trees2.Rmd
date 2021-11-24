@@ -1,0 +1,342 @@
+---
+title: "Session 8.2 Trees and Random Forests: Classifying iPlayer users "
+author: "Dr Kanishka Bhattacharya"
+date: "`r Sys.Date()`"
+output: 
+    html_document:
+      number_sections: true
+      highlight: haddock
+      theme: spacelab
+      toc: yes
+      toc_depth: 2
+      toc_float:
+        collapsed: false
+---
+<style>
+div.grey { background-color:#DCDCDC; border-radius: 5px; padding: 20px; border-style: groove;}
+</style>
+<style>
+div.navy { background-color:#A2A2B6; border-radius: 5px; padding: 20px; border-style: groove; color: #ffffff;}
+</style>
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Learning Objectives for Session 8
+
+ <div class = "grey">
+ <ol type="i">
+<li> K nearest neighbors (K-NN)
+<ol type="a">
+<li> Basics of the algorithm
+<li> When does it work?
+<li> Tuning the parameters
+</ol>
+<li> Comparing different supervised algorithms
+<li> Introduction to ensemble methods: What is the idea behind ensemble methods?
+<li> Classification and regression trees 
+<ol type="a">
+<li> Basics of the algorithm -- splitting and stopping rules
+<li> Visualizing results
+<li> Feature importance
+</ol>
+</ol> 
+</div>
+
+# Introduction
+
+In this session I demonstrate the use of trees to predict whether an iPlayer user in january will use the player in February as well. This document is organized as follows.
+
+<div class = "grey">
+<!--begin html code: I will mark the html code in my markdown files, these are not directly related to the course material-->
+<b>Table of Contents</b>
+ 
+<ul>
+  <li>Section 1: Learning Objectives for Session 8</li>
+  <li>Section 2: Introduction</li>
+  <li>Section 3: Fitting basic tree models</li>
+  <li>Section 4: Hyperparameter tuning</li>
+  <li>Section 5: Variability of trees</li>
+</ul>  
+
+</div>
+<!--end html code-->
+
+First let's load packages we will need.
+
+```{r ,results="hide",warning=FALSE,  message=FALSE  }
+options("huxtable.knit_print_df" = FALSE)
+if(!is.element("tidyverse", installed.packages()[,1]))
+{  install.packages("tidyverse")}
+
+if(!is.element("Hmisc", installed.packages()[,1]))
+{  install.packages("Hmisc")} #package for data summary using `describe`
+
+if(!is.element("ggplot2", installed.packages()[,1]))
+{  install.packages("ggplot2")} #package for plots
+if(!is.element("ggthemes", installed.packages()[,1]))
+{  install.packages("ggthemes")} #package to make fancier ggplots
+if(!is.element("caret", installed.packages()[,1]))
+{  install.packages("caret",dependencies=T)} #package to train machine learning algorithms
+if(!is.element("Metrics", installed.packages()[,1]))
+{ install.packages("Metrics")}  #package to check the performance of machine learning algorithms
+
+if(!is.element("rpart", installed.packages()[,1]))
+{  install.packages("rpart")} #package to fit trees
+
+if(!is.element("rpart.plot", installed.packages()[,1]))
+{  install.packages("rpart.plot")} #package to visualize trees
+
+library(tidyverse)
+library(lubridate)
+library(cluster)
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(Metrics)
+library(pROC)
+```
+
+## Reading in BBC Data
+
+Let's read the user based data. This is the user data we generated in the last rmarkdown document when we implement K-NN. Then I generate training and test data sets, as usual.
+
+```{r prep data}
+userBasedData <- read.csv(file="UserBasedData_S8.csv",header=TRUE)
+head(userBasedData)
+
+
+combined_trees<-userBasedData
+
+####Let's first generate a training and test data set
+library(rsample)
+set.seed(100)
+train_test_split <- initial_split(combined_trees, prop = 0.75) #training set contains 75% of the data
+# Create the training dataset
+combined_train <- training(train_test_split)
+combined_test <- testing(train_test_split)
+```
+
+
+
+# Fitting tree models
+
+I first demonstrate how to fit trees with pre-pruning. Specifically I force the tree algorithm to stop when the number of observations in a leaf node falls below a limit. Then I demonstrate how to use additional arguments to modify the tree model. 
+
+## Fitting a basic tree
+
+I will use the `rpart` function from the `rpart` package. I will use the `rpart.plot` function to plot the results.
+
+`rpart` function provides many options to stop the growth of a tree (see below). Let's fit a tree using various options.
+
+
+
+
+
+```{r tree fit,warning=FALSE,  message=FALSE  }
+# Below 'cp' is a complexity metric. We will take a more detailed look below
+# 'maxdepth' is the maximum depth of the tree is allowed to grow
+# 'minbucket' is the minimum number of observations allowed in a leaf
+# 'minsplit' is the minimum number of observations allowed for a leaf to be considered for a split
+# Change minbucket =50 once you run this version
+BBC_treeModel_oos <- rpart(formula=watched_in_Feb  ~ ., 
+                           data = combined_train,method = "class", 
+                           control = rpart.control(cp = 0, maxdepth = 20,minbucket=200,minsplit=2))
+
+
+plot(BBC_treeModel_oos)
+#Summarize the results
+summary(BBC_treeModel_oos)
+#We can also see how important each variable. There is no statistical test however.
+varImp(BBC_treeModel_oos)
+
+```
+
+## Visualizing trees
+
+`rpart.plot` function has many different options for plotting; see http://www.milbo.org/rpart-plot/prp.pdf
+
+```{r}
+# Let's plot the resulting tree in two different ways. Compare the results to see the differences.
+
+rpart.plot(BBC_treeModel_oos)
+
+```
+
+>Exercise: Use different options to visualize the resulting tree. For example run the following code.
+> rpart.plot(bbc_tree_Fit, type = 3, box.palette = c("red", "green"), fallen.leaves = TRUE)
+
+## Fitting tree models with more options
+
+`rpart` function provides many options to stop the growth of a tree (see below). Let's fit a tree using various options.
+
+```{r tree with more options,warning=FALSE,  message=FALSE  }
+# Below 'cp' is a complexity metric. We will take a more detailed look below
+# 'maxdepth' is the maximum depth of the tree is allowed to grow
+# 'minbucket' is the minimum number of observations allowed in a leaf
+# 'minsplit' is the minimum number of observations allowed for a leaf to be considered for a split
+# Change minbucket =50 once you run this version
+BBC_treeModel_oos <- rpart(formula=watched_in_Feb  ~ ., 
+                           data = combined_train,method = "class", 
+                           control = rpart.control(cp = 0, maxdepth = 20,minbucket=5,minsplit=2))
+
+#Be careful with plotting large trees. it may take a long time
+#If you think there are a lot of leafs just use 'plot' instead of 'rpart.plot'
+plot(BBC_treeModel_oos)
+
+```
+
+Let's see how our tree performs in predicting usage in February. Let's look at the confusion matrix first. How do the results look? Compare it with the results of logistic regression.
+
+```{r confusion matrix, warning=FALSE, message=FALSE  }
+
+class_largetree <-predict(BBC_treeModel_oos, cutoff = .5 , type = "class")
+confusionMatrix(data = class_largetree, reference = as.factor(combined_train$watched_in_Feb)) 
+
+```
+
+Let's now plot the ROC curve. How do the results look? 
+
+```{r tree roc curve,warning=FALSE,  message=FALSE  }
+
+#Predict probability of watching in february
+watched_prob <- predict(BBC_treeModel_oos, type = "prob")[,2]
+
+#Draw ROC chart
+ROC <- roc(combined_train$watched_in_Feb, watched_prob)
+
+# Calculate AUC
+AUC_train<-round(ROC$auc*100, digits=2)
+AUC_train_text<-paste("Large tree AUC=",round(ROC$auc*100, digits=2),"%",sep = "")
+
+#Use ggroc to Draw ROC chart
+g <- ggroc(ROC)
+g +  ggtitle(AUC_train_text) + 
+  geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed")
+
+```
+
+This, however, is a little misleading because we use the training data to test the performance of the model. Let's use the testing data next. What do you think about the results? 
+
+```{r testing large tree,warning=FALSE,  message=FALSE  }
+## I use the same code I used in the above chunk by changing the data set from 'combined_train' to 'combined_test'
+watched_M2_prob <- predict(BBC_treeModel_oos,combined_test, type = "prob")[,2]
+ROC_test <- roc(combined_test$watched_in_Feb, watched_M2_prob)
+AUC_test=round(ROC_test$auc*100, digits=2);
+
+# Plot the ROC curve
+g2 <- ggroc(list("Train"=ROC, "Test"=ROC_test))
+g2+ggtitle(paste("AUC_train=",AUC_train,"%"," AUC_test=",AUC_test,"%",sep = ""))+ 
+  geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed")
+```
+
+>Exercise: What can you conclude from this ROC?
+
+>Exercise: Fit a new tree model by setting `minbucket=50`. How do the results change? Which model performed better? Why?
+
+# Hyperparameter tuning using 'caret' package
+
+I use the `train` function below to tune parameter `cp`. Recall that cp controls the complexity of the tree by adding a cost term to the objective function that takes into account the size of the trees.
+
+Let's start with a simple model.
+```{r}
+set.seed(100)
+model2 <- train(
+  watched_in_Feb  ~ ., data = combined_train, 
+  method = "rpart",
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 10
+  )
+# Plot model accuracy vs different values of
+# cp (complexity parameter): train function chooses the value if we do not specify what cp values it shoudl consider.
+
+#we can display the performance of the tree algorithm as a function of cp
+print(model2)
+#or plot the results
+plot(model2)
+```
+
+Let's do something more sophisticated.
+
+```{r,warning=FALSE,  message=FALSE  }
+# I am using the standard set-up for the train function for classification. 
+# The main difference from previous examples is that now we are tuning 'cp'
+
+modelLookup("rpart")
+
+# Let's set reasonable values for 'cp'
+trctrl <- trainControl(method = "cv", 
+                       number = 5, 
+                       classProbs=TRUE, 
+                       summaryFunction=twoClassSummary)
+
+#I choose cp values that seems to result in low error based on plot above
+Grid <- expand.grid(cp = seq( 0.0000, 0.0020,0.0001))
+
+dtree_fit <- train(watched_in_Feb  ~ ., 
+                   data = combined_train, 
+                   method = "rpart",
+                   metric="ROC",
+                   trControl=trctrl,
+                   tuneGrid=Grid) 
+# Plot the best tree model found
+rpart.plot(dtree_fit$finalModel)
+# Print the search results of 'train' function
+ plot(dtree_fit) 
+print(dtree_fit)
+
+```
+
+
+Let's examine the predictive performance of the best tree in the test data.
+
+
+```{r,warning=FALSE,  message=FALSE  }
+# This is the same code I used above.
+library(ggthemes)
+watched_prob <- predict(dtree_fit,combined_test, type = "prob")[,2]
+ROC_best_tree <- roc(combined_test$watched_in_Feb, watched_prob)
+AUC_best_tree<-round(ROC_best_tree$auc*100, digits=2)
+# Plot the ROC curve
+g2 <- ggroc(list("Trees"=ROC_best_tree))
+title<-paste("Hyper-Tuned Tree (validation data)=",AUC_best_tree,"%",sep="")
+g2+ggtitle(title) +geom_segment(aes(x = 1, xend = 0, y = 0, yend = 1), color="grey", linetype="dashed")
+
+```
+
+
+# Variability of Trees 
+
+We need to be careful about making conclusions based on the model trees find because they are high variance. This means if the data changes even slightly they can fit very different models. I demonstrate this next. 
+
+First I take two different random training samples from the data. Then fit a tree model to these two sample. Compare the resulting trees from these two different data sets.
+
+```{r,warning=FALSE,  message=FALSE  }
+# Fit a tree model using the parameters we identified by hypertuning
+set.seed(100)
+train_test_split <- initial_split(combined_trees, prop = 0.75) #training set contains 75% of the data
+combined_train <- training(train_test_split)
+#
+set.seed(856214)
+train_test_split2 <- initial_split(combined_trees, prop = 0.75) #training set contains 75% of the data
+combined_train2 <- training(train_test_split2)
+
+BBC_treeModel_oos <- rpart(formula=watched_in_Feb  ~ ., 
+      data = combined_train,method = "class",  control = rpart.control(cp = 0.0001, minbucket = 200))
+
+#Fit the same tree model again using a different training data set
+
+
+
+# Create the training dataset
+BBC_treeModel_oos2 <- rpart(formula=watched_in_Feb  ~ ., 
+      data = combined_train2,method = "class",  control = rpart.control(cp = 0.0001, minbucket = 200))
+
+
+#Compare the results
+rpart.plot(BBC_treeModel_oos)
+rpart.plot(BBC_treeModel_oos2)
+
+```
+
+>Check the performance of these two models in their respective testing data sets. How different is AUC?

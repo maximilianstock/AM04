@@ -1,0 +1,256 @@
+---
+title: 'Session 10: Data Science Capstone Project'
+author: "Tolga Tezcan"
+date: "`r Sys.Date()`"
+output: 
+    html_document:
+      number_sections: true
+      highlight: haddock
+      theme: spacelab
+      toc: yes
+      toc_depth: 2
+      toc_float:
+        collapsed: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<style>
+div.navy1 { background-color:#686868; border-radius: 5px; padding: 20px; border-style: groove; color: #ffffff;}
+
+</style>
+
+
+
+```{r, load_libraries, include = FALSE}
+
+if(!is.element("tidyverse", installed.packages()[,1]))
+{  install.packages("tidyverse")}
+
+if(!is.element("Hmisc", installed.packages()[,1]))
+{  install.packages("Hmisc")} #package for data summary using `describe`
+
+if(!is.element("ggplot2", installed.packages()[,1]))
+{  install.packages("ggplot2")} #package for plots
+if(!is.element("ggthemes", installed.packages()[,1]))
+{  install.packages("ggthemes")} #package to make fancier ggplots
+
+if(!is.element("janitor", installed.packages()[,1]))
+{ install.packages("janitor")} #package to visualize results of machine learning tools
+if(!is.element("rpart.plot", installed.packages()[,1]))
+{  install.packages("rpart.plot")} #package to visualize trees
+
+library(rpart.plot)
+library(caret)
+library(tidyverse) # the usual stuff: dplyr, readr, and other goodies
+library(lubridate)
+library(janitor) # clean_names()
+library(Hmisc)
+```
+
+# Introduction and learning objectives
+
+<div class = "navy1">
+The purpose of this exercise is to build an estimation engine to guide investment decisions in London house market. You will first build machine learning algorithms (and tune them) to estimate the house prices given variety of information about each property. Then, using your algorithm, you will choose 200 houses to invest in out of about 2000 houses on the market at the moment.
+
+
+<b>Learning objectives</b>
+ 
+<ol type="i">
+  <li>Using different data mining algorithms for prediction.</li>
+  <li>Dealing with large data sets</li>
+  <li>Tuning data mining algorithms</li>
+  <li>Interpreting data mining algorithms and deducing importance of variables</li>
+  <li>Using results of data mining algorithms to make business decisions</li>
+</ol>  
+</div>
+
+# Load data
+
+There are two sets of data, i) training data that has the actual prices ii) out of sample data that has the asking prices. Load both data sets. 
+
+Make sure you understand what information each column contains. Note that not all information provided might be useful in predicting house prices, but do not make any assumptions before you decide what information you use in your prediction algorithms.
+
+```{r read-investigate}
+#read in the data
+
+london_house_prices_2019_training<-read.csv("training_data_assignment_with_prices.csv")
+london_house_prices_2019_out_of_sample<-read.csv("test_data_assignment.csv")
+
+
+
+#fix data types in both data sets
+
+#fix dates
+london_house_prices_2019_training <- london_house_prices_2019_training %>% mutate(date=as.Date(date))
+london_house_prices_2019_out_of_sample<-london_house_prices_2019_out_of_sample %>% mutate(date=as.Date(date))
+#change characters to factors
+london_house_prices_2019_training <- london_house_prices_2019_training %>% mutate_if(is.character,as.factor)
+london_house_prices_2019_out_of_sample<-london_house_prices_2019_out_of_sample %>% mutate_if(is.character,as.factor)
+
+#take a quick look at what's in the data
+str(london_house_prices_2019_training)
+str(london_house_prices_2019_out_of_sample)
+
+
+
+```
+
+
+```{r split the price data to training and testing}
+#let's do the initial split
+library(rsample)
+train_test_split <- initial_split(london_house_prices_2019_training, prop = 0.75) #training set contains 75% of the data
+# Create the training dataset
+train_data <- training(train_test_split)
+test_data <- testing(train_test_split)
+
+
+
+```
+
+
+# Visualize data 
+
+Visualize and examine the data. What plots could be useful here? What do you learn from these visualizations?
+
+```{r visualize}
+
+
+
+
+```
+
+Estimate a correlation table between prices and other continuous variables. What do you glean from the correlation table?
+
+```{r, correlation table, warning=FALSE, message=FALSE}
+
+# produce a correlation table using GGally::ggcor()
+# this takes a while to plot
+
+library("GGally")
+london_house_prices_2019_training %>% 
+  select(-ID) %>% #keep Y variable last
+  ggcorr(method = c("pairwise", "pearson"), layout.exp = 2,label_round=2, label = TRUE,label_size = 2,hjust = 1,nbreaks = 5,size = 2,angle = -20)
+
+```
+
+
+# Fit a linear regression model
+
+To help you get started I build a linear regression model below. I chose a subset of the features with no particular goal. You can (and should) add more variables and/or choose variable selection methods if you want.
+
+```{r LR model}
+
+
+#Define control variables
+control <- trainControl (
+    method="cv",
+    number=5,
+    verboseIter=TRUE) #by setting this to true the model will report its progress after each estimation
+
+#we are going to train the model and report the results using k-fold cross validation
+model1_lm<-train(
+    price ~ distance_to_station +water_company+property_type+whether_old_or_new+freehold_or_leasehold+latitude+ longitude,
+    train_data,
+   method = "lm",
+    trControl = control
+   )
+
+# summary of the results
+summary(model1_lm)
+```
+
+
+```{r}
+# we can check variable importance as well
+importance <- varImp(model1_lm, scale=TRUE)
+plot(importance)
+
+
+```
+
+## Predict the values in testing and out of sample data
+
+Below I use the predict function to test the performance of the model in testing data and summarize the performance of the linear regression model. How can you measure the quality of your predictions?
+
+```{r}
+# We can predict the testing values
+
+predictions <- predict(model1_lm,test_data)
+
+lr_results<-data.frame(  RMSE = RMSE(predictions, test_data$price), 
+                            Rsquare = R2(predictions, test_data$price))
+
+                            
+lr_results                         
+
+#We can predict prices for out of sample data the same way
+predictions_oos <- predict(model1_lm,london_house_prices_2019_out_of_sample)
+```
+
+# Fit a tree model
+
+Next I fit a tree model using the same subset of features. Again you can (and should) add more variables and tune the parameter of your tree to find a better fit. 
+
+Compare the performance of the linear regression model with the tree model; which one performs better? Why do you think that is the case?
+
+```{r tree model}
+
+model2_tree <- train(
+  price ~ distance_to_station +water_company+property_type+whether_old_or_new+latitude+ longitude,
+  train_data,
+  method = "rpart",
+  trControl = control,
+  tuneLength=10
+    )
+
+#You can view how the tree performs
+model2_tree$results
+
+#You can view the final tree
+rpart.plot(model2_tree$finalModel)
+
+#you can also visualize the variable importance
+importance <- varImp(model2_tree, scale=TRUE)
+plot(importance)
+
+```
+
+
+# Other algorithms
+
+Use at least two other algorithms to predict prices. Don't forget to tune the parameters of these algorithms. And then compare the performances of your algorithms to linear regression and trees.
+
+# Stacking
+
+Use stacking to ensemble your algorithms.
+
+```{r,warning=FALSE,  message=FALSE }
+
+
+```
+
+
+# Pick investments
+
+In this section you should use the best algorithm you identified to choose 200 properties from the out of sample data.
+
+```{r,warning=FALSE,  message=FALSE }
+
+
+numchoose=200
+
+oos<-london_house_prices_2019_out_of_sample
+
+#predict the value of houses
+oos$predict <- predict(model2_tree,oos)
+#Choose the ones you want to invest here
+#Make sure you choose exactly 200 of them
+
+#output your choices. Change the name of the file to your "lastname_firstname.csv"
+write.csv(oos,"my_submission.csv")
+
+```

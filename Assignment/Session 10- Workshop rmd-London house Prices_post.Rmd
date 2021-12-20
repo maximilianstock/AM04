@@ -1,0 +1,385 @@
+---
+title: 'Session 10: Data Science Capstone Project'
+author: "Tolga Tezcan"
+date: "`r Sys.Date()`"
+output: 
+    html_document:
+      number_sections: true
+      highlight: haddock
+      theme: spacelab
+      toc: yes
+      toc_depth: 2
+      toc_float:
+        collapsed: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+<style>
+div.navy1 { background-color:#686868; border-radius: 5px; padding: 20px; border-style: groove; color: #ffffff;}
+
+</style>
+
+
+
+```{r, load_libraries, include = FALSE}
+
+if(!is.element("tidyverse", installed.packages()[,1]))
+{  install.packages("tidyverse")}
+
+if(!is.element("Hmisc", installed.packages()[,1]))
+{  install.packages("Hmisc")} #package for data summary using `describe`
+
+if(!is.element("ggplot2", installed.packages()[,1]))
+{  install.packages("ggplot2")} #package for plots
+if(!is.element("ggthemes", installed.packages()[,1]))
+{  install.packages("ggthemes")} #package to make fancier ggplots
+
+if(!is.element("janitor", installed.packages()[,1]))
+{ install.packages("janitor")} #package to visualize results of machine learning tools
+if(!is.element("rpart.plot", installed.packages()[,1]))
+{  install.packages("rpart.plot")} #package to visualize trees
+
+library(rpart.plot)
+library(caret)
+library(tidyverse) # the usual stuff: dplyr, readr, and other goodies
+library(lubridate)
+library(janitor) # clean_names()
+library(Hmisc)
+library(rsample)
+library(scales)
+library(GGally)
+library(caretEnsemble)
+```
+
+# Introduction and learning objectives
+
+<div class = "navy1">
+The purpose of this exercise is to build an estimation engine to guide investment decisions in London house market. You will first build machine learning algorithms (and tune them) to estimate the house prices given variety of information about each property. Then, using your algorithm, you will choose 200 houses to invest in out of about 2000 houses on the market at the moment.
+
+
+<b>Learning objectives</b>
+ 
+<ol type="i">
+  <li>Using different data mining algorithms for prediction.</li>
+  <li>Dealing with large data sets</li>
+  <li>Tuning data mining algorithms</li>
+  <li>Interpreting data mining algorithms and deducing importance of variables</li>
+  <li>Using results of data mining algorithms to make business decisions</li>
+</ol>  
+</div>
+
+# Load data
+
+There are two sets of data, i) training data that has the actual prices ii) out of sample data that has the asking prices. Load both data sets. 
+
+Make sure you understand what information each column contains. Note that not all information provided might be useful in predicting house prices, but do not make any assumptions before you decide what information you use in your prediction algorithms.
+
+```{r read-investigate}
+#read in the data
+
+london_house_prices_2019_training<-read.csv("training_data_assignment_with_prices.csv")
+london_house_prices_2019_out_of_sample<-read.csv("test_data_assignment.csv")
+
+
+
+#fix data types in both data sets
+
+#fix dates
+london_house_prices_2019_training <- london_house_prices_2019_training %>% mutate(date=as.Date(date))
+london_house_prices_2019_out_of_sample<-london_house_prices_2019_out_of_sample %>% mutate(date=as.Date(date))
+#change characters to factors
+london_house_prices_2019_training <- london_house_prices_2019_training %>% mutate_if(is.character,as.factor)
+london_house_prices_2019_out_of_sample<-london_house_prices_2019_out_of_sample %>% mutate_if(is.character,as.factor)
+
+#take a quick look at what's in the data
+str(london_house_prices_2019_training)
+str(london_house_prices_2019_out_of_sample)
+
+
+
+```
+
+
+```{r split the price data to training and testing}
+#let's do the initial split
+train_test_split <- initial_split(london_house_prices_2019_training, prop = 0.75) #training set contains 75% of the data
+# Create the training dataset
+train_data <- training(train_test_split)
+test_data <- testing(train_test_split)
+```
+
+
+# Visualize data 
+
+Visualize and examine the data. What plots could be useful here? What do you learn from these visualizations?
+
+```{r visualize}
+plotData <- train_data %>% 
+         group_by(date) %>% 
+         summarise(medianPrice = median(price))
+ggplot(plotData, aes(x = date, y = medianPrice)) +
+  geom_point() +
+  geom_line() +
+  scale_y_continuous(labels = number) +
+  theme_bw()
+
+ggplot(train_data, aes(x = price)) +
+  geom_density() +
+  scale_y_continuous(labels = percent) +
+  scale_x_continuous(labels = number) +
+  theme_bw()
+
+```
+
+Estimate a correlation table between prices and other continuous variables. What do you glean from the correlation table?
+
+```{r, correlation table, warning=FALSE, message=FALSE, fig.width=5}
+
+# produce a correlation table using GGally::ggcorr()
+# this takes a while to plot
+london_house_prices_2019_training %>% 
+  select(-ID) %>% #keep Y variable last
+  ggcorr(method = c("pairwise", "pearson"), layout.exp = 2,label_round=2, label = TRUE,label_size = 2,hjust = 1,nbreaks = 5,size = 2,angle = -20)
+
+```
+
+
+# Fit a linear regression model
+
+To help you get started I build a linear regression model below. I chose a subset of the features with no particular goal. You can (and should) add more variables and/or choose variable selection methods if you want.
+
+
+*Selected variables based on the following thoughts: Logic (Especially interaction), Correlation Plot, Importance Plot)*
+
+```{r LR model}
+
+
+#Define control variables
+lrControl <- trainControl (
+    method="cv",
+    number=5,
+    verboseIter=TRUE) #by setting this to true the model will report its progress after each estimation
+
+#we are going to train the model and report the results using k-fold cross validation
+model1_lm<-train(
+    price ~ total_floor_area*london_zone*number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude,
+    train_data,
+   method = "lm",
+    trControl = lrControl
+   )
+
+# summary of the results
+summary(model1_lm)
+```
+
+
+```{r}
+# we can check variable importance as well
+importance <- varImp(model1_lm, scale=TRUE)
+plot(importance)
+
+
+```
+
+## Predict the values in testing and out of sample data
+
+Below I use the predict function to test the performance of the model in testing data and summarize the performance of the linear regression model. How can you measure the quality of your predictions?
+
+```{r oos linear regression}
+# We can predict the testing values
+
+predictions <- predict(model1_lm,test_data)
+
+lr_results<-data.frame(  RMSE = RMSE(predictions, test_data$price), 
+                            Rsquare = R2(predictions, test_data$price))
+lr_results                         
+
+```
+
+# Fit a tree model
+
+Next I fit a tree model using the same subset of features. Again you can (and should) add more variables and tune the parameter of your tree to find a better fit. 
+
+Compare the performance of the linear regression model with the tree model; which one performs better? Why do you think that is the case?
+
+```{r tree model}
+modelLookup("rpart")
+
+treeControl <- trainControl(
+    method="cv",
+    number=5,
+    verboseIter=TRUE)
+
+treeGrid <- expand.grid(cp = seq( 0.0000, 0.0020,0.0001))
+
+model2_tree <- train(
+    price ~ total_floor_area + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude,
+  train_data,
+  method = "rpart",
+  trControl = treeControl,
+  tuneLength=10,
+  tuneGrid = treeGrid
+    )
+
+#You can view how the tree performs
+model2_tree$results
+
+plot(model2_tree)
+model2_tree
+```
+
+```{r oos trees}
+# We can predict the testing values
+
+treePredictions <- predict(model2_tree,test_data)
+
+tree_results<-data.frame(  RMSE = RMSE(treePredictions, test_data$price), 
+                            Rsquare = R2(treePredictions, test_data$price))
+tree_results                         
+```
+
+# Other algorithms
+
+Use at least two other algorithms to predict prices. Don't forget to tune the parameters of these algorithms. And then compare the performances of your algorithms to linear regression and trees.
+
+```{r support vector machines}
+svmControl <- trainControl(method="repeatedcv", number=5, verboseIter = TRUE)
+model3_svm <- train(
+    price ~ total_floor_area + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude,
+  train_data,
+  method = "svmRadial",
+  trControl = svmControl,
+  tuneLength=10)
+
+model3_svm
+
+```
+
+```{r oos svm}
+svmPredictions <- predict(model3_svm,test_data)
+
+svm_results<-data.frame(  RMSE = RMSE(svmPredictions, test_data$price), 
+                            Rsquare = R2(svmPredictions, test_data$price))
+svm_results   
+```
+
+```{r random forest}
+
+modelLookup("ranger")
+rfControl <- trainControl(verboseIter = TRUE, method = "cv", number = 5)
+
+
+model4_randomForests <- train(
+  price ~ total_floor_area + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude,
+  na.action = na.omit,
+  train_data,
+  method = "ranger",
+  trControl = rfControl
+)
+model4_randomForests$bestTune
+```
+
+```{r oos rf}
+rfPredictions <- predict(model4_randomForests,test_data)
+
+rf_results<-data.frame(  RMSE = RMSE(rfPredictions, test_data$price), 
+                            Rsquare = R2(rfPredictions, test_data$price))
+rf_results
+
+```
+
+```{r gradient boosting machine}
+
+caretGrid <- expand.grid(interaction.depth=c(1, 3, 5), n.trees = (0:50)*50,
+                   shrinkage=c(0.01, 0.001),
+                   n.minobsinnode=10)
+
+
+metric <- "RMSE"
+trainControl <- trainControl(method="cv", number=5, verboseIter = TRUE)
+
+gbm.caret <- train(price ~ total_floor_area + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude, 
+                   test_data,
+                   distribution="gaussian",
+                   method="gbm",
+                   trControl=trainControl,
+                   tuneGrid=caretGrid,
+                   metric=metric, 
+                   bag.fraction=0.75)                  
+
+gbm.caret
+gbm.caret$bestTune
+
+```
+
+```{r gbm oos}
+gbmPredictions <- predict(gbm.caret,test_data)
+
+gbm_results<-data.frame(  RMSE = RMSE(gbmPredictions, test_data$price), 
+                            Rsquare = R2(gbmPredictions, test_data$price))
+gbm_results
+
+```
+
+```{r}
+models <- c("Linear Regression", "Regression Trees", "Support Vector Machines", "Random Forests", "Gradient Boosting Methods")
+resultSummary = cbind(models, rbind(lr_results, tree_results, svm_results, rf_results, gbm_results))
+resultSummary
+```
+
+# Stacking
+
+Use stacking to ensemble your algorithms.
+
+```{r,warning=FALSE,  message=FALSE }
+stackingControl <- trainControl(method="cv", number=5, verboseIter = TRUE)
+
+modelList <- caretList(
+  price ~ total_floor_area + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude,
+  train_data,
+  trControl = stackingControl,
+  methodList = c("glm"),
+  tuneList = list(
+    ranger = caretModelSpec(method = "ranger", tuneGrid = data.frame(mtry=8,splitrule="variance",min.node.size=5)),
+    gbm = caretModelSpec(method = "gbm", tuneGrid = data.frame(n.trees = 1000, interaction.depth = 5, shrinkage = 0.01, n.minobsinnode = 10))
+  )
+)
+```
+
+```{r stacking oos}
+stackingPredictions <- predict(modelList,test_data)
+
+stacking_results<-data.frame(  RMSE = RMSE(stackingPredictions, test_data$price), 
+                            Rsquare = R2(stackingPredictions, test_data$price))
+stacking_results
+```
+
+# Pick investments
+
+In this section you should use the best algorithm you identified to choose 200 properties from the out of sample data.
+
+```{r,warning=FALSE,  message=FALSE }
+
+
+numchoose=200
+
+oos<-london_house_prices_2019_out_of_sample
+
+#predict the value of houses
+oos$predict <- predict(modelList,oos)
+#Choose the ones you want to invest here
+#Make sure you choose exactly 200 of them
+
+mutOos <- oos %>% 
+  mutate(absProfit = predict - asking_price, roi = (predict - asking_price)/asking_price)
+
+mutOos <- mutOos %>% 
+  arrange(desc(absProfit))
+
+#output your choices. Change the name of the file to your "lastname_firstname.csv"
+write.csv(oos,"my_submission.csv")
+
+```

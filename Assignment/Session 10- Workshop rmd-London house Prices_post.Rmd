@@ -136,6 +136,8 @@ ggplot(train_data, aes(x = price)) +
 
 Estimate a correlation table between prices and other continuous variables. What do you glean from the correlation table?
 
+*A first idea about potential relations in the data as well as potential drivers of our dependent price variable.*
+
 ```{r, correlation table, warning=FALSE, message=FALSE, fig.width=5}
 
 # produce a correlation table using GGally::ggcorr()
@@ -404,10 +406,11 @@ oos$predict <- predict(model5_stacking,oos)
 mutOos <- oos %>% 
   mutate(absProfit = predict - asking_price, roi = (predict - asking_price)/asking_price)
 
-mutOos <- mutOos[1:200, ]
 
 mutOos <- mutOos %>% 
-  arrange(desc(absProfit)) 
+  arrange(desc(roi)) 
+mutOos <- mutOos[1:numchoose, ]
+
 #output your choices. Change the name of the file to your "lastname_firstname.csv"
 write.csv(oos,"my_submission.csv")
 

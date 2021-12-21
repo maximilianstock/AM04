@@ -116,21 +116,27 @@ test_data <- testing(train_test_split)
 
 Visualize and examine the data. What plots could be useful here? What do you learn from these visualizations?
 
-```{r visualize}
+```{r visualize Median daily pricing, fig.width= 6}
 plotData <- train_data %>% 
          group_by(date) %>% 
          summarise(medianPrice = median(price))
 ggplot(plotData, aes(x = date, y = medianPrice)) +
+  geom_line(colour = "steelblue") +
   geom_point() +
-  geom_line() +
+  geom_smooth() +
   scale_y_continuous(labels = number) +
-  theme_bw()
+  theme_bw() +
+  labs(x = "Date", y = "Daily Median Sales Price in GBP")
+```
 
+
+```{r visualize Density, fig.width= 4}
 ggplot(train_data, aes(x = price)) +
-  geom_density() +
+  geom_density(color = "steelblue") +
   scale_y_continuous(labels = percent) +
   scale_x_continuous(labels = number) +
-  theme_bw()
+  theme_bw() +
+  labs(x = "Price in GBP", y = "Distribution")
 
 ```
 
@@ -144,10 +150,10 @@ Estimate a correlation table between prices and other continuous variables. What
 # this takes a while to plot
 london_house_prices_2019_training %>% 
   select(-ID) %>% #keep Y variable last
-  ggcorr(method = c("pairwise", "pearson"), layout.exp = 2,label_round=2, label = TRUE,label_size = 2,hjust = 1,nbreaks = 5,size = 2,angle = -20)
+  ggcorr(method = c("pairwise", "pearson"), layout.exp = 2,label_round=2, label = TRUE,label_size = 2,hjust = 1,nbreaks = 5,size = 2) +
+  theme_bw()
 
 ```
-
 
 # Fit a linear regression model
 
@@ -157,6 +163,11 @@ To help you get started I build a linear regression model below. I chose a subse
 *Selected variables based on the following thoughts: Logic (Especially interaction), Correlation Plot, Importance Plot)*
 
 *It seems like the significant district variables are districts that are considered to be expensive.*
+
+
+```{r}
+
+```
 
 
 
@@ -180,6 +191,11 @@ summary(model1_lm)
 ```
 
 
+```{r LR log issue}
+plot(lm(log(price) ~  district*total_floor_area + london_zone*number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type,
+    train_data))
+```
+
 ```{r, fig.height=4}
 # we can check variable importance as well
 importance <- varImp(model1_lm, scale=TRUE)
@@ -196,7 +212,6 @@ train_data %>%
     theme_classic()
 
 ```
-
 
 ## Predict the values in testing and out of sample data
 
@@ -230,7 +245,7 @@ treeControl <- trainControl(
 treeGrid <- expand.grid(cp = seq( 0.0000, 0.0020,0.0001))
 
 model2_tree <- train(
-    price ~ district*total_floor_area + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type,
+    price ~ district*total_floor_area + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income,
   train_data,
   method = "rpart",
   trControl = treeControl,
@@ -261,9 +276,9 @@ tree_results
 Use at least two other algorithms to predict prices. Don't forget to tune the parameters of these algorithms. And then compare the performances of your algorithms to linear regression and trees.
 
 ```{r support vector machines}
-svmControl <- trainControl(method="repeatedcv", number=5, verboseIter = TRUE)
+svmControl <- trainControl(method="cv", number=5, verboseIter = TRUE)
 model3_svm <- train(
-    price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type,
+    price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income,
   train_data,
   method = "svmRadial",
   trControl = svmControl,
@@ -291,7 +306,7 @@ rfControl <- trainControl(verboseIter = TRUE, method = "cv", number = 5)
 
 
 model4_randomForests <- train(
-    price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type,
+    price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income,
   na.action = na.omit,
   train_data,
   method = "ranger",
@@ -342,7 +357,7 @@ gbm_results
 
 ```
 
-```{r}
+```{r result summaries}
 models <- c("Linear Regression", "Regression Trees", "Support Vector Machines", "Random Forests", "Gradient Boosting Methods")
 resultSummary = cbind(models, rbind(lr_results, tree_results, svm_results, rf_results, gbm_results))
 resultSummary
@@ -370,6 +385,16 @@ modelList <- caretList(
   )
 )
 ```
+
+```{r}
+resamples <- resamples(modelList)
+```
+
+```{r}
+dotplot(resamples, metric = "RMSE")
+```
+
+
 
 ```{r stacking oos}
 model5_stacking <- caretStack(

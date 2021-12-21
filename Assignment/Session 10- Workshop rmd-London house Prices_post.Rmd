@@ -180,8 +180,6 @@ summary(model1_lm)
 # we can check variable importance as well
 importance <- varImp(model1_lm, scale=TRUE)
 plot(importance)
-
-
 ```
 
 ## Predict the values in testing and out of sample data
@@ -195,7 +193,7 @@ predictions <- predict(model1_lm,test_data)
 
 lr_results<-data.frame(  RMSE = RMSE(predictions, test_data$price), 
                             Rsquare = R2(predictions, test_data$price))
-lr_results                         
+lr_results             
 
 ```
 
@@ -229,6 +227,9 @@ model2_tree$results
 
 plot(model2_tree)
 model2_tree
+
+treeImportance <- varImp(model2_tree, scale=TRUE)
+plot(treeImportance)
 ```
 
 ```{r oos trees}
@@ -252,9 +253,12 @@ model3_svm <- train(
   train_data,
   method = "svmRadial",
   trControl = svmControl,
-  tuneLength=10)
+  tuneLength = 10)
 
-model3_svm
+model3_svm$bestTune
+
+svmImportance <- varImp(model3_svm, scale=TRUE)
+plot(svmImportance)
 
 ```
 
@@ -312,7 +316,6 @@ gbm.caret <- train(price ~ total_floor_area + london_zone + number_habitable_roo
 
 gbm.caret
 gbm.caret$bestTune
-
 ```
 
 ```{r gbm oos}
@@ -341,8 +344,8 @@ modelList <- caretList(
   price ~ total_floor_area + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude,
   train_data,
   trControl = stackingControl,
-  methodList = c("glm"),
   tuneList = list(
+    svm = caretModelSpec(method = "svmRadial", tuneGrid = data.frame(sigma = 0.09256334, C = 16)),
     ranger = caretModelSpec(method = "ranger", tuneGrid = data.frame(mtry=8,splitrule="variance",min.node.size=5)),
     gbm = caretModelSpec(method = "gbm", tuneGrid = data.frame(n.trees = 1000, interaction.depth = 5, shrinkage = 0.01, n.minobsinnode = 10))
   )
@@ -350,11 +353,19 @@ modelList <- caretList(
 ```
 
 ```{r stacking oos}
-stackingPredictions <- predict(modelList,test_data)
+model5_stacking <- caretStack(
+  modelList,
+  method = "glm",
+  metric = "RMSE",
+  trControl = stackingControl
+)
 
-stacking_results<-data.frame(  RMSE = RMSE(stackingPredictions, test_data$price), 
+stackingPredictions <- predict(model5_stacking,test_data)
+
+stacking_results<-data.frame(RMSE = RMSE(stackingPredictions, test_data$price), 
                             Rsquare = R2(stackingPredictions, test_data$price))
 stacking_results
+
 ```
 
 # Pick investments
@@ -369,16 +380,17 @@ numchoose=200
 oos<-london_house_prices_2019_out_of_sample
 
 #predict the value of houses
-oos$predict <- predict(modelList,oos)
+oos$predict <- predict(model5_stacking,oos)
 #Choose the ones you want to invest here
 #Make sure you choose exactly 200 of them
 
 mutOos <- oos %>% 
   mutate(absProfit = predict - asking_price, roi = (predict - asking_price)/asking_price)
 
-mutOos <- mutOos %>% 
-  arrange(desc(absProfit))
+mutOos <- mutOos[1:200, ]
 
+mutOos <- mutOos %>% 
+  arrange(desc(absProfit)) 
 #output your choices. Change the name of the file to your "lastname_firstname.csv"
 write.csv(oos,"my_submission.csv")
 

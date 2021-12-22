@@ -291,7 +291,6 @@ modelLookup("svmRadial")
 
 # Tuning of C and Sigma is not done in a pre-specified grid fashion, but is left over to the algorithm to get a sense for the outcomes in a broader and less constrained way.
 
-
 svmControl <- trainControl(method="cv", number=5, verboseIter = TRUE)
 model3_svm <- train(
     price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income,
@@ -321,14 +320,16 @@ svm_results
 modelLookup("ranger")
 rfControl <- trainControl(verboseIter = TRUE, method = "cv", number = 5)
 
+# Tuning of C and Sigma is not done in a pre-specified grid fashion, but is left over to the algorithm to get a sense for the outcomes in a broader and less constrained way.
 
 model4_randomForests <- train(
     price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income,
-  na.action = na.omit,
-  train_data,
-  method = "ranger",
-  trControl = rfControl
+    na.action = na.omit,
+    train_data,
+    method = "ranger",
+    trControl = rfControl
 )
+model4_randomForests$results
 model4_randomForests$bestTune
 ```
 
@@ -343,23 +344,21 @@ rf_results
 
 ```{r gradient boosting machine}
 
-gbmGrid <- expand.grid(interaction.depth=c(1, 3, 5), n.trees = (0:50)*50,
-                   shrinkage=c(0.01, 0.001),
-                   n.minobsinnode=10)
+gbmGrid <- expand.grid(interaction.depth=c(1, 3, 5), n.trees = (0:50)*50,shrinkage=c(0.01, 0.001), n.minobsinnode=10)
 
 
-metric <- "RMSE"
+metricToMinimise <- "RMSE"
 trainControl <- trainControl(method="cv", number=5, verboseIter = TRUE)
 
 model5_gbm <- train(
     price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type, 
-                   test_data,
-                   distribution="gaussian",
-                   method="gbm",
-                   trControl=trainControl,
-                   tuneGrid=caretGrid,
-                   metric=metric, 
-                   bag.fraction=0.75)                  
+    train_data,
+    distribution="gaussian",
+    method="gbm",
+    trControl=trainControl,
+    tuneGrid=gbmGrid,
+    metric=metricToMinimise, 
+    bag.fraction=0.75)                  
 
 model5_gbm
 model5_gbm$bestTune
@@ -389,16 +388,16 @@ stackingControl <- trainControl(method="cv", number=5, verboseIter = TRUE)
 
 model3_svm$bestTune
 model4_randomForests$bestTune
-gbm.caret$bestTune
+model5_gbm$bestTune
 
 modelList <- caretList(
     price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type,
   train_data,
   trControl = stackingControl,
   tuneList = list(
-    svm = caretModelSpec(method = "svmRadial", tuneGrid = data.frame(sigma = 0.01235292	, C = 64)),
+    svm = caretModelSpec(method = "svmRadial", tuneGrid = data.frame(sigma = 0.01224677	, C = 32)),
     ranger = caretModelSpec(method = "ranger", tuneGrid = data.frame(mtry=47,splitrule="extratrees",min.node.size=5)),
-    gbm = caretModelSpec(method = "gbm", tuneGrid = data.frame(n.trees = 2450, interaction.depth = 5, shrinkage = 0.01, n.minobsinnode = 10))
+    gbm = caretModelSpec(method = "gbm", tuneGrid = data.frame(n.trees = 2500, interaction.depth = 5, shrinkage = 0.01, n.minobsinnode = 10))
   )
 )
 ```
@@ -409,24 +408,35 @@ resamples <- resamples(modelList)
 
 ```{r}
 dotplot(resamples, metric = "RMSE")
+modelCor(resamples)
 ```
 
+*Lets assess what happens when we include linear regression in the stacking algorithm. Maybe this has the potential to enhance the final result, since it might counteract the tendency to overfit of the existing three models.*
 
+```{r stacking oos including linear reg}
 
-```{r stacking oos}
-model5_stacking <- caretStack(
-  modelList,
+withLRmodelList <- caretList(
+    price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type,
+  train_data,
+  trControl = stackingControl,
+  tuneList = list(
+    lr = caretModelSpec(method = "lm"),
+    svm = caretModelSpec(method = "svmRadial", tuneGrid = data.frame(sigma = 0.01224677	, C = 32)),
+    ranger = caretModelSpec(method = "ranger", tuneGrid = data.frame(mtry=47,splitrule="extratrees",min.node.size=5)),
+    gbm = caretModelSpec(method = "gbm", tuneGrid = data.frame(n.trees = 2500, interaction.depth = 5, shrinkage = 0.01, n.minobsinnode = 10))
+  ))
+  
+withLRmodel7_stacking <- caretStack(
+  withLRmodelList,
   method = "glm",
   metric = "RMSE",
   trControl = stackingControl
 )
+withLRstackingPredictions <- predict(withLRmodel7_stacking,test_data)
 
-stackingPredictions <- predict(model5_stacking,test_data)
-
-stacking_results<-data.frame(RMSE = RMSE(stackingPredictions, test_data$price), 
-                            Rsquare = R2(stackingPredictions, test_data$price))
-stacking_results #old 0.8242658	new 0.8541002	
-
+withLRstacking_results<-data.frame(RMSE = RMSE(withLRstackingPredictions, test_data$price), 
+                            Rsquare = R2(withLRstackingPredictions, test_data$price))
+withLRstacking_results # 	
 ```
 
 # Pick investments
@@ -441,7 +451,7 @@ numchoose=200
 oos<-london_house_prices_2019_out_of_sample
 
 #predict the value of houses
-oos$predict <- predict(model5_stacking,oos)
+oos$predict <- predict(model6_stacking,oos)
 #Choose the ones you want to invest here
 #Make sure you choose exactly 200 of them
 

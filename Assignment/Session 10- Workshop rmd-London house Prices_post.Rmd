@@ -165,13 +165,9 @@ To help you get started I build a linear regression model below. I chose a subse
 *It seems like the significant district variables are districts that are considered to be expensive.*
 
 
-```{r}
-
-```
-
-
 
 ```{r LR model}
+
 #Define control variables
 lrControl <- trainControl (
     method="cv",
@@ -190,11 +186,40 @@ model1_lm<-train(
 summary(model1_lm)
 ```
 
+```{r LR logged model}
+model1_lm_log<-train(
+    log(price) ~  district*total_floor_area + london_zone*number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type,
+    train_data,
+   method = "lm",
+    trControl = lrControl
+   )
+```
 
-```{r LR log issue}
-plot(lm(log(price) ~  district*total_floor_area + london_zone*number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type,
+## Predict the values in testing and out of sample data
+
+Below I use the predict function to test the performance of the model in testing data and summarize the performance of the linear regression model. How can you measure the quality of your predictions?
+
+```{r oos linear regression}
+lrPredictions <- predict(model1_lm,test_data)
+
+lr_results<-data.frame(  RMSE = RMSE(lrPredictions, test_data$price), 
+                            Rsquare = R2(lrPredictions, test_data$price))
+lr_results 
+```
+
+```{r oos logged linear regression}
+loggedPredictions <- exp(predict(model1_lm_log,test_data))
+
+logged_lr_results<-data.frame(  RMSE = RMSE(loggedPredictions, test_data$price), 
+                            Rsquare = R2(loggedPredictions, test_data$price))
+logged_lr_results 
+```
+
+```{r LR log issue, fig.width = 5}
+plot(lm(price ~  district*total_floor_area + london_zone*number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type,
     train_data))
 ```
+
 
 ```{r, fig.height=4}
 # we can check variable importance as well
@@ -213,20 +238,6 @@ train_data %>%
 
 ```
 
-## Predict the values in testing and out of sample data
-
-Below I use the predict function to test the performance of the model in testing data and summarize the performance of the linear regression model. How can you measure the quality of your predictions?
-
-```{r oos linear regression}
-# We can predict the testing values
-
-predictions <- predict(model1_lm,test_data)
-
-lr_results<-data.frame(  RMSE = RMSE(predictions, test_data$price), 
-                            Rsquare = R2(predictions, test_data$price))
-lr_results             
-
-```
 
 # Fit a tree model
 
@@ -242,7 +253,7 @@ treeControl <- trainControl(
     number=5,
     verboseIter=TRUE)
 
-treeGrid <- expand.grid(cp = seq( 0.0000, 0.0020,0.0001))
+treeGrid <- expand.grid(cp = seq(0.0000, 0.001,0.00001))
 
 model2_tree <- train(
     price ~ district*total_floor_area + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income,
@@ -255,7 +266,7 @@ model2_tree <- train(
 
 model2_tree$results
 plot(model2_tree)
-
+model2_tree$bestTune
 
 treeImportance <- varImp(model2_tree, scale=TRUE)
 plot(treeImportance)
@@ -276,6 +287,11 @@ tree_results
 Use at least two other algorithms to predict prices. Don't forget to tune the parameters of these algorithms. And then compare the performances of your algorithms to linear regression and trees.
 
 ```{r support vector machines}
+modelLookup("svmRadial")
+
+# Tuning of C and Sigma is not done in a pre-specified grid fashion, but is left over to the algorithm to get a sense for the outcomes in a broader and less constrained way.
+
+
 svmControl <- trainControl(method="cv", number=5, verboseIter = TRUE)
 model3_svm <- train(
     price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income,
@@ -284,6 +300,7 @@ model3_svm <- train(
   trControl = svmControl,
   tuneLength = 10)
 
+model3_svm$results
 model3_svm$bestTune
 
 svmImportance <- varImp(model3_svm, scale=TRUE)
@@ -326,7 +343,7 @@ rf_results
 
 ```{r gradient boosting machine}
 
-caretGrid <- expand.grid(interaction.depth=c(1, 3, 5), n.trees = (0:50)*50,
+gbmGrid <- expand.grid(interaction.depth=c(1, 3, 5), n.trees = (0:50)*50,
                    shrinkage=c(0.01, 0.001),
                    n.minobsinnode=10)
 
@@ -334,7 +351,7 @@ caretGrid <- expand.grid(interaction.depth=c(1, 3, 5), n.trees = (0:50)*50,
 metric <- "RMSE"
 trainControl <- trainControl(method="cv", number=5, verboseIter = TRUE)
 
-gbm.caret <- train(
+model5_gbm <- train(
     price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type, 
                    test_data,
                    distribution="gaussian",
@@ -344,12 +361,12 @@ gbm.caret <- train(
                    metric=metric, 
                    bag.fraction=0.75)                  
 
-gbm.caret
-gbm.caret$bestTune
+model5_gbm
+model5_gbm$bestTune
 ```
 
 ```{r gbm oos}
-gbmPredictions <- predict(gbm.caret,test_data)
+gbmPredictions <- predict(model5_gbm,test_data)
 
 gbm_results<-data.frame(  RMSE = RMSE(gbmPredictions, test_data$price), 
                             Rsquare = R2(gbmPredictions, test_data$price))

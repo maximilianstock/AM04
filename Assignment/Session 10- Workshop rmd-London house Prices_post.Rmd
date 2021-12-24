@@ -167,7 +167,7 @@ london_house_prices_2019_training %>%
 lrControl <- trainControl (
     method="cv",
     number=5,
-    verboseIter=TRUE) #by setting this to true the model will report its progress after each estimation
+    verboseIter=FALSE) #by setting this to FALSE the model will not report its progress after each estimation
 
 #we are going to train the model and report the results using k-fold cross validation
 model1_lm<-train(
@@ -235,13 +235,13 @@ logged_lr_results
 
 *As we can see, the log transformed model performs significantly worse, especially in out of sample testing. We therefore decide to stay with untransformed price as a response variable.* 
 
-```{r, fig.height=5.5}
+```{r variable Importance, fig.height=8, fig.width=8}
 # we can check variable importance as well
 importance <- varImp(model1_lm, scale=TRUE)
 plot(importance)
 ```
 
-```{r examine district prices}
+```{r examine district prices, fig.height=8, fig.width=8}
 
 train_data %>% 
   group_by(district) %>% 
@@ -256,13 +256,13 @@ train_data %>%
 
 # Fit a tree model
 
-```{r tree model, fig.height=4}
-modelLookup("rpart") #to penalise
+```{r tree model, fig.height=8, fig.width=8}
+modelLookup("rpart") #To mitigate decision trees’ shortcomings, the introduction of a complexity parameter cp and an associated cost function penalising a tree’s size can be useful. In the case at hand, an array of values for cp are iterated/tuned through and optimal values are found by cross validating RMSEs. As trees run the risk of overfitting as their size increases, this pruning measure allows for optimising variance.
 
 treeControl <- trainControl(
     method="cv",
     number=5,
-    verboseIter=TRUE)
+    verboseIter=FALSE)
 
 treeGrid <- expand.grid(cp = seq(0.0000, 0.001,0.00001))
 
@@ -275,13 +275,12 @@ model2_tree <- train(
   tuneGrid = treeGrid
     )
 
-model2_tree$results
 plot(model2_tree)
-model2_tree$bestTune
-
 treeImportance <- varImp(model2_tree, scale=TRUE)
 plot(treeImportance)
 ```
+
+*The plot on the complexity parameter against the cross validated RMSE performance nicely indicates the optimally tuned penalising parameter. It is furthermore interesting to see how variable importance gets is different to , which can possibly be attributed to trees susceptibility to over emphasise variables with large outlying values.*
 
 ```{r oos trees}
 # We can predict the testing values
@@ -304,8 +303,7 @@ modelLookup("svmRadial")
 
 # Tuning of C and Sigma is not done in a pre-specified grid fashion, but is left over to the algorithm to get a sense for the outcomes in a broader and less constrained way.
 
-svmControl <- trainControl(method="cv", number=5, verboseIter = TRUE) #again, train controlling is done through cross validation
-
+svmControl <- trainControl(method="cv", number=5, verboseIter = FALSE) #again, train controlling is done through cross validation
 
 model3_svm <- train(
     price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income,
@@ -313,8 +311,6 @@ model3_svm <- train(
   method = "svmRadial",
   trControl = svmControl,
   tuneLength = 10)
-
-model3_svm$bestTune
 
 svmImportance <- varImp(model3_svm, scale=TRUE)
 plot(svmImportance)
@@ -335,7 +331,7 @@ svm_results
 #next, we construct random forests
 
 modelLookup("ranger")
-rfControl <- trainControl(verboseIter = TRUE, method = "cv", number = 5)
+rfControl <- trainControl(verboseIter = FALSE, method = "cv", number = 5)
 
 # Tuning on mtry (number of predictors randomly sampled at each split), splitrule and min.node.size is not done in a pre-specified grid fashion, but is left over to the algorithm to get a sense for the outcomes in a broader and less constrained way.
 
@@ -346,8 +342,6 @@ model4_randomForests <- train(
     method = "ranger",
     trControl = rfControl
 )
-model4_randomForests$results
-model4_randomForests$bestTune
 ```
 
 ```{r oos rf}
@@ -368,7 +362,7 @@ rf_results
 gbmGrid <- expand.grid(interaction.depth=c(1, 3, 5), n.trees = (0:50)*50,shrinkage=c(0.01, 0.001), n.minobsinnode=10)
 
 metricToMinimise <- "RMSE"
-trainControl <- trainControl(method="cv", number=5, verboseIter = TRUE)
+trainControl <- trainControl(method="cv", number=5, verboseIter = FALSE)
 
 model5_gbm <- train(
     price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type, 
@@ -379,7 +373,6 @@ model5_gbm <- train(
     tuneGrid=gbmGrid,
     metric=metricToMinimise, 
     bag.fraction=0.75)                  
-model5_gbm$bestTune
 ```
 
 ```{r gbm oos}
@@ -403,7 +396,7 @@ resultSummary
 # Stacking
 
 ```{r,warning=FALSE,  message=FALSE }
-stackingControl <- trainControl(method="cv", number=5, verboseIter = TRUE)
+stackingControl <- trainControl(method="cv", number=5, verboseIter = FALSE)
 
 #first, lets look at the best tunes from each of the single underlying models such that we can take the chosen parameters for stacking
 model3_svm$bestTune
@@ -472,7 +465,7 @@ withLRstackingPredictions <- predict(withLRmodel7_stacking,test_data)
 
 withLRstacking_results<-data.frame(RMSE = RMSE(withLRstackingPredictions, test_data$price), 
                             Rsquare = R2(withLRstackingPredictions, test_data$price))
-withLRstacking_results # 	
+withLRstacking_results
 ```
 
 *As we can see, the introduction of linear regression to our stacking ensemble actually reduces the out of sample performance slightly. Lets not consider it for our final model.*
@@ -482,8 +475,6 @@ withLRstacking_results #
 *We want to maximiize the average percentage return/profit on invested houses. This means that we have to predict actual prices/valuations as accurately as possible. We thus choose the stacking model (excluding Linear Regression) as it was showing the best out of sample performance.*
 
 ```{r,warning=FALSE,  message=FALSE }
-numchoose=200
-
 oos<-london_house_prices_2019_out_of_sample
 
 #predict the value of houses
@@ -494,12 +485,7 @@ oos$predict <- predict(model6_stacking,oos)
 mutOos <- oos %>% 
   mutate(absProfit = predict - asking_price, roi = (predict - asking_price)/asking_price)
 
-
-mutOos <- mutOos %>% 
-  arrange(desc(roi)) 
-mutOos <- mutOos[1:numchoose, ]
-
 #output your choices. Change the name of the file to your "lastname_firstname.csv"
-write.csv(oos,"my_submission.csv")
+write.csv(mutOos,"my_submission.csv")
 
 ```

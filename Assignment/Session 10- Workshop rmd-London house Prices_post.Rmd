@@ -104,6 +104,7 @@ str(london_house_prices_2019_out_of_sample)
 
 
 ```{r split the price data to training and testing}
+set.seed(2999)
 #let's do the initial split
 train_test_split <- initial_split(london_house_prices_2019_training, prop = 0.75) #training set contains 75% of the data
 # Create the training dataset
@@ -116,8 +117,8 @@ test_data <- testing(train_test_split)
 
 Visualize and examine the data. What plots could be useful here? What do you learn from these visualizations?
 
-```{r visualize Median daily pricing, fig.width= 6}
-plotData <- train_data %>% 
+```{r visualize Median daily pricing, fig.width= 10}
+plotData <- london_house_prices_2019_training %>% 
          group_by(date) %>% 
          summarise(medianPrice = median(price))
 ggplot(plotData, aes(x = date, y = medianPrice)) +
@@ -129,9 +130,11 @@ ggplot(plotData, aes(x = date, y = medianPrice)) +
   labs(x = "Date", y = "Daily Median Sales Price in GBP")
 ```
 
+*There seems to be a slight seasonality in daily meadian house prices, with the summer being higher. However, this increase does not seem too drastic.*
 
-```{r visualize Density, fig.width= 4}
-ggplot(train_data, aes(x = price)) +
+
+```{r visualize Density, fig.width= 10}
+ggplot(london_house_prices_2019_training, aes(x = price)) +
   geom_density(color = "steelblue") +
   scale_y_continuous(labels = percent) +
   scale_x_continuous(labels = number) +
@@ -140,11 +143,13 @@ ggplot(train_data, aes(x = price)) +
 
 ```
 
+*House prices are heaviliy skewed to the right. This indicates that there are large outlying values. We should assess the impact of this on our models.*
+
 Estimate a correlation table between prices and other continuous variables. What do you glean from the correlation table?
 
 *A first idea about potential relations in the data as well as potential drivers of our dependent price variable.*
 
-```{r, correlation table, warning=FALSE, message=FALSE, fig.width=5}
+```{r, correlation table, warning=FALSE, message=FALSE, fig.width=10}
 
 # produce a correlation table using GGally::ggcorr()
 # this takes a while to plot
@@ -157,17 +162,7 @@ london_house_prices_2019_training %>%
 
 # Fit a linear regression model
 
-To help you get started I build a linear regression model below. I chose a subset of the features with no particular goal. You can (and should) add more variables and/or choose variable selection methods if you want.
-
-
-*Selected variables based on the following thoughts: Logic (Especially interaction), Correlation Plot, Importance Plot)*
-
-*It seems like the significant district variables are districts that are considered to be expensive.*
-
-
-
 ```{r LR model}
-
 #Define control variables
 lrControl <- trainControl (
     method="cv",
@@ -186,20 +181,40 @@ model1_lm<-train(
 summary(model1_lm)
 ```
 
+*We have also seen how there are large outlying values in our response price variable.*
+
+```{r LR log issue, fig.width = 5}
+#untransformed price variable
+plot(lm(price ~  district*total_floor_area + london_zone*number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type,
+    train_data))
+#transformed price variable
+plot(lm(log(price) ~  district*total_floor_area + london_zone*number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type,
+    train_data))
+```
+
+*In the above Plots, we can identify how residuals at extreme quartile ends diverge from normality. Let us therefore see how the performance of our linear regression changes when we do a log transformation of price.*
+
 ```{r LR logged model}
+#building log transformed price linear regression
 model1_lm_log<-train(
     log(price) ~  district*total_floor_area + london_zone*number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type,
     train_data,
    method = "lm",
     trControl = lrControl
    )
+
+summary(model1_lm_log)
 ```
 
 ## Predict the values in testing and out of sample data
 
 Below I use the predict function to test the performance of the model in testing data and summarize the performance of the linear regression model. How can you measure the quality of your predictions?
 
+*We can assess the performance through 1) the fit of the model obtained through cross validation and 2) through out of sample testing and aiming for RMSE minimisation.*
+
 ```{r oos linear regression}
+
+#results of untransformed price variable
 lrPredictions <- predict(model1_lm,test_data)
 
 lr_results<-data.frame(  RMSE = RMSE(lrPredictions, test_data$price), 
@@ -208,6 +223,9 @@ lr_results
 ```
 
 ```{r oos logged linear regression}
+
+#results of transformed price variable
+
 loggedPredictions <- exp(predict(model1_lm_log,test_data))
 
 logged_lr_results<-data.frame(  RMSE = RMSE(loggedPredictions, test_data$price), 
@@ -215,13 +233,9 @@ logged_lr_results<-data.frame(  RMSE = RMSE(loggedPredictions, test_data$price),
 logged_lr_results 
 ```
 
-```{r LR log issue, fig.width = 5}
-plot(lm(price ~  district*total_floor_area + london_zone*number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type,
-    train_data))
-```
+*As we can see, the log transformed model performs significantly worse, especially in out of sample testing. We therefore decide to stay with untransformed price as a response variable.* 
 
-
-```{r, fig.height=4}
+```{r, fig.height=5.5}
 # we can check variable importance as well
 importance <- varImp(model1_lm, scale=TRUE)
 plot(importance)
@@ -238,12 +252,9 @@ train_data %>%
 
 ```
 
+*Comparing the above plot with the plot on variable importance, we can see that interaction variables are especially important between floor area and districts that have high median prices in housing. This lets us to hypothesise that floor area has specifically high leverage on a houses valuation when it is located in an upscale area.*
 
 # Fit a tree model
-
-Next I fit a tree model using the same subset of features. Again you can (and should) add more variables and tune the parameter of your tree to find a better fit. 
-
-Compare the performance of the linear regression model with the tree model; which one performs better? Why do you think that is the case?
 
 ```{r tree model, fig.height=4}
 modelLookup("rpart") #to penalise
@@ -282,6 +293,8 @@ tree_results<-data.frame(  RMSE = RMSE(treePredictions, test_data$price),
 tree_results                         
 ```
 
+*One can argue that the poor OOS performance of the Regression Trees is caused by the algorithm’s tendency towards high variance. Applying this notion to the problem of predicting prices, it is likely that the presence of large outlying values in training sets heavily influences predictions to extreme degrees. Thus, this model is not considered viable for further analyses, especially because random forests represent an improvement to simpler regression trees.*
+
 # Other algorithms
 
 Use at least two other algorithms to predict prices. Don't forget to tune the parameters of these algorithms. And then compare the performances of your algorithms to linear regression and trees.
@@ -291,7 +304,9 @@ modelLookup("svmRadial")
 
 # Tuning of C and Sigma is not done in a pre-specified grid fashion, but is left over to the algorithm to get a sense for the outcomes in a broader and less constrained way.
 
-svmControl <- trainControl(method="cv", number=5, verboseIter = TRUE)
+svmControl <- trainControl(method="cv", number=5, verboseIter = TRUE) #again, train controlling is done through cross validation
+
+
 model3_svm <- train(
     price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income,
   train_data,
@@ -299,7 +314,6 @@ model3_svm <- train(
   trControl = svmControl,
   tuneLength = 10)
 
-model3_svm$results
 model3_svm$bestTune
 
 svmImportance <- varImp(model3_svm, scale=TRUE)
@@ -308,6 +322,8 @@ plot(svmImportance)
 ```
 
 ```{r oos svm}
+
+# lets also assess the out of sample performance of support vector regression
 svmPredictions <- predict(model3_svm,test_data)
 
 svm_results<-data.frame(  RMSE = RMSE(svmPredictions, test_data$price), 
@@ -316,11 +332,12 @@ svm_results
 ```
 
 ```{r random forest}
+#next, we construct random forests
 
 modelLookup("ranger")
 rfControl <- trainControl(verboseIter = TRUE, method = "cv", number = 5)
 
-# Tuning of C and Sigma is not done in a pre-specified grid fashion, but is left over to the algorithm to get a sense for the outcomes in a broader and less constrained way.
+# Tuning on mtry (number of predictors randomly sampled at each split), splitrule and min.node.size is not done in a pre-specified grid fashion, but is left over to the algorithm to get a sense for the outcomes in a broader and less constrained way.
 
 model4_randomForests <- train(
     price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income,
@@ -334,6 +351,7 @@ model4_randomForests$bestTune
 ```
 
 ```{r oos rf}
+#we also assess the 
 rfPredictions <- predict(model4_randomForests,test_data)
 
 rf_results<-data.frame(  RMSE = RMSE(rfPredictions, test_data$price), 
@@ -395,11 +413,24 @@ modelList <- caretList(
   train_data,
   trControl = stackingControl,
   tuneList = list(
-    svm = caretModelSpec(method = "svmRadial", tuneGrid = data.frame(sigma = 0.01224677	, C = 32)),
+    svm = caretModelSpec(method = "svmRadial", tuneGrid = data.frame(sigma = 0.01226624	, C = 32)),
     ranger = caretModelSpec(method = "ranger", tuneGrid = data.frame(mtry=47,splitrule="extratrees",min.node.size=5)),
     gbm = caretModelSpec(method = "gbm", tuneGrid = data.frame(n.trees = 2500, interaction.depth = 5, shrinkage = 0.01, n.minobsinnode = 10))
   )
 )
+
+model6_stacking <- caretStack(
+  modelList,
+  method = "glm",
+  metric = "RMSE",
+  trControl = stackingControl
+)
+
+stackingPredictions <- predict(model6_stacking,test_data)
+
+stacking_results<-data.frame(RMSE = RMSE(stackingPredictions, test_data$price), 
+                            Rsquare = R2(stackingPredictions, test_data$price))
+stacking_results # 	
 ```
 
 ```{r}
@@ -421,7 +452,7 @@ withLRmodelList <- caretList(
   trControl = stackingControl,
   tuneList = list(
     lr = caretModelSpec(method = "lm"),
-    svm = caretModelSpec(method = "svmRadial", tuneGrid = data.frame(sigma = 0.01224677	, C = 32)),
+    svm = caretModelSpec(method = "svmRadial", tuneGrid = data.frame(sigma = 0.01226624	, C = 32)),
     ranger = caretModelSpec(method = "ranger", tuneGrid = data.frame(mtry=47,splitrule="extratrees",min.node.size=5)),
     gbm = caretModelSpec(method = "gbm", tuneGrid = data.frame(n.trees = 2500, interaction.depth = 5, shrinkage = 0.01, n.minobsinnode = 10))
   ))
@@ -439,13 +470,13 @@ withLRstacking_results<-data.frame(RMSE = RMSE(withLRstackingPredictions, test_d
 withLRstacking_results # 	
 ```
 
+*As we can see, the introduction of linear regression to our stacking ensemble actually reduces the out of sample performance slightly. Lets not consider it for our final model.*
+
 # Pick investments
 
-In this section you should use the best algorithm you identified to choose 200 properties from the out of sample data.
+*We want to maximiize the average percentage return/profit on invested houses. This means that we have to predict actual prices/valuations as accurately as possible. We thus choose the stacking model (excluding Linear Regression) as it was showing the best out of sample performance.*
 
 ```{r,warning=FALSE,  message=FALSE }
-
-
 numchoose=200
 
 oos<-london_house_prices_2019_out_of_sample

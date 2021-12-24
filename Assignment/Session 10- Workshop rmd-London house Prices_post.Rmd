@@ -149,7 +149,7 @@ Estimate a correlation table between prices and other continuous variables. What
 
 *A first idea about potential relations in the data as well as potential drivers of our dependent price variable.*
 
-```{r, correlation table, warning=FALSE, message=FALSE, fig.width=10}
+```{r, correlation table, warning=FALSE, message=FALSE, fig.width=8}
 
 # produce a correlation table using GGally::ggcorr()
 # this takes a while to plot
@@ -351,7 +351,7 @@ model4_randomForests$bestTune
 ```
 
 ```{r oos rf}
-#we also assess the 
+#we also assess the out of sample performance of the constructed trees
 rfPredictions <- predict(model4_randomForests,test_data)
 
 rf_results<-data.frame(  RMSE = RMSE(rfPredictions, test_data$price), 
@@ -361,9 +361,11 @@ rf_results
 ```
 
 ```{r gradient boosting machine}
+#as a last algorithm, we engage in gradient boosting models
 
+#lets tune the characteristics of the built trees
+# tuning is mostly done to mitigate overfitting/variance by adjusting multiple parameters, especially through limiting n.tree (the number of trees/iterations) and interaction.depth (the number of nodes). At the heart of GBM is shrinkage, regularising the impact of additionally added trees to limit susceptibility to overfitting
 gbmGrid <- expand.grid(interaction.depth=c(1, 3, 5), n.trees = (0:50)*50,shrinkage=c(0.01, 0.001), n.minobsinnode=10)
-
 
 metricToMinimise <- "RMSE"
 trainControl <- trainControl(method="cv", number=5, verboseIter = TRUE)
@@ -377,15 +379,14 @@ model5_gbm <- train(
     tuneGrid=gbmGrid,
     metric=metricToMinimise, 
     bag.fraction=0.75)                  
-
-model5_gbm
 model5_gbm$bestTune
 ```
 
 ```{r gbm oos}
+#out of sample testing of gbm
 gbmPredictions <- predict(model5_gbm,test_data)
 
-gbm_results<-data.frame(  RMSE = RMSE(gbmPredictions, test_data$price), 
+gbm_results<-data.frame( RMSE = RMSE(gbmPredictions, test_data$price), 
                             Rsquare = R2(gbmPredictions, test_data$price))
 gbm_results
 
@@ -397,13 +398,14 @@ resultSummary = cbind(models, rbind(lr_results, tree_results, svm_results, rf_re
 resultSummary
 ```
 
-# Stacking
+*Our constructed Support Vector Machines seem to be most accurate in out of sample testing. We will focus on the last three models for ensembling.*
 
-Use stacking to ensemble your algorithms.
+# Stacking
 
 ```{r,warning=FALSE,  message=FALSE }
 stackingControl <- trainControl(method="cv", number=5, verboseIter = TRUE)
 
+#first, lets look at the best tunes from each of the single underlying models such that we can take the chosen parameters for stacking
 model3_svm$bestTune
 model4_randomForests$bestTune
 model5_gbm$bestTune
@@ -413,6 +415,7 @@ modelList <- caretList(
   train_data,
   trControl = stackingControl,
   tuneList = list(
+    #we create a model list with the best tunes of each model
     svm = caretModelSpec(method = "svmRadial", tuneGrid = data.frame(sigma = 0.01226624	, C = 32)),
     ranger = caretModelSpec(method = "ranger", tuneGrid = data.frame(mtry=47,splitrule="extratrees",min.node.size=5)),
     gbm = caretModelSpec(method = "gbm", tuneGrid = data.frame(n.trees = 2500, interaction.depth = 5, shrinkage = 0.01, n.minobsinnode = 10))
@@ -421,7 +424,7 @@ modelList <- caretList(
 
 model6_stacking <- caretStack(
   modelList,
-  method = "glm",
+  method = "glm", #we use logistic regression as a combiner algorithm to balance between underlying models
   metric = "RMSE",
   trControl = stackingControl
 )
@@ -430,19 +433,21 @@ stackingPredictions <- predict(model6_stacking,test_data)
 
 stacking_results<-data.frame(RMSE = RMSE(stackingPredictions, test_data$price), 
                             Rsquare = R2(stackingPredictions, test_data$price))
-stacking_results # 	
+stacking_results
 ```
+*As we can see, this one-time oos testing has given us a slighlty worse performance than support vector machines. However, it is likely to assume that across different tests, stacking will be more consistent and robust due to mitigated overfitting.* 
 
-```{r}
+
+```{r RMSEs}
+
+#lets look at the confidence intervals for RMSEs of each underlying model
 resamples <- resamples(modelList)
-```
 
-```{r}
 dotplot(resamples, metric = "RMSE")
 modelCor(resamples)
 ```
-
-*Lets assess what happens when we include linear regression in the stacking algorithm. Maybe this has the potential to enhance the final result, since it might counteract the tendency to overfit of the existing three models.*
+*The above plot aids in determining the robustness of our out of sample performance result. As we can see, the width of each confidence interval across the underlying algorithms are rather similar. This hints at a well balanced choice of models for the ensemble algorithm.*
+*As a next step, lets assess what happens when we include linear regression in the stacking algorithm. Maybe this has the potential to enhance the final result, since it might counteract the tendency to overfit of the existing three models.*
 
 ```{r stacking oos including linear reg}
 

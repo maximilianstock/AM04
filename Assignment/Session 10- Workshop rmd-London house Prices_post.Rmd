@@ -1,6 +1,6 @@
 ---
 title: 'Session 10: Data Science Capstone Project'
-author: "Tolga Tezcan"
+author: "Maximilian Stock"
 date: "`r Sys.Date()`"
 output: 
     html_document:
@@ -235,13 +235,13 @@ logged_lr_results
 
 *As we can see, the log transformed model performs significantly worse, especially in out of sample testing. We therefore decide to stay with untransformed price as a response variable.* 
 
-```{r variable Importance, fig.height=8, fig.width=8}
+```{r variable Importance, fig.height=12, fig.width=12}
 # we can check variable importance as well
 importance <- varImp(model1_lm, scale=TRUE)
 plot(importance)
 ```
 
-```{r examine district prices, fig.height=8, fig.width=8}
+```{r examine district prices, fig.height=12, fig.width=12}
 
 train_data %>% 
   group_by(district) %>% 
@@ -256,7 +256,7 @@ train_data %>%
 
 # Fit a tree model
 
-```{r tree model, fig.height=8, fig.width=8}
+```{r tree model, fig.height=12, fig.width=12}
 modelLookup("rpart") #To mitigate decision trees’ shortcomings, the introduction of a complexity parameter cp and an associated cost function penalising a tree’s size can be useful. In the case at hand, an array of values for cp are iterated/tuned through and optimal values are found by cross validating RMSEs. As trees run the risk of overfitting as their size increases, this pruning measure allows for optimising variance.
 
 treeControl <- trainControl(
@@ -354,7 +354,7 @@ rf_results
 
 ```
 
-```{r gradient boosting machine}
+```{r gradient boosting machine, warning=FALSE,message=FALSE,error=FALSE, eval=FALSE}
 #as a last algorithm, we engage in gradient boosting models
 
 #lets tune the characteristics of the built trees

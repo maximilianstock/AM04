@@ -354,7 +354,7 @@ rf_results
 
 ```
 
-```{r gradient boosting machine, warning=FALSE,message=FALSE,error=FALSE, echo=FALSE}
+```{r gradient boosting machine, warning=FALSE,message=FALSE,error=FALSE, results='hide'}
 #as a last algorithm, we engage in gradient boosting models
 
 #lets tune the characteristics of the built trees
@@ -395,7 +395,7 @@ resultSummary
 
 # Stacking
 
-```{r,warning=FALSE,  message=FALSE }
+```{r,warning=FALSE,  message=FALSE, results='hide'}
 stackingControl <- trainControl(method="cv", number=5, verboseIter = FALSE)
 
 #first, lets look at the best tunes from each of the single underlying models such that we can take the chosen parameters for stacking
@@ -426,6 +426,10 @@ stackingPredictions <- predict(model6_stacking,test_data)
 
 stacking_results<-data.frame(RMSE = RMSE(stackingPredictions, test_data$price), 
                             Rsquare = R2(stackingPredictions, test_data$price))
+```
+
+
+```{r,warning=FALSE,  message=FALSE}
 stacking_results
 ```
 *As we can see, this one-time oos testing has given us a slighlty worse performance than support vector machines. However, it is likely to assume that across different tests, stacking will be more consistent and robust due to mitigated overfitting.* 
@@ -442,8 +446,7 @@ modelCor(resamples)
 *The above plot aids in determining the robustness of our out of sample performance result. As we can see, the width of each confidence interval across the underlying algorithms are rather similar. This hints at a well balanced choice of models for the ensemble algorithm.*
 *As a next step, lets assess what happens when we include linear regression in the stacking algorithm. Maybe this has the potential to enhance the final result, since it might counteract the tendency to overfit of the existing three models.*
 
-```{r stacking oos including linear reg}
-
+```{r stacking oos including linear reg, message=FALSE, results='hide'}
 withLRmodelList <- caretList(
     price ~ total_floor_area + district + london_zone + number_habitable_rooms + co2_emissions_potential + distance_to_station +water_company+property_type+latitude+ longitude + average_income + property_type,
   train_data,
@@ -465,6 +468,10 @@ withLRstackingPredictions <- predict(withLRmodel7_stacking,test_data)
 
 withLRstacking_results<-data.frame(RMSE = RMSE(withLRstackingPredictions, test_data$price), 
                             Rsquare = R2(withLRstackingPredictions, test_data$price))
+```
+
+
+```{r results stacking oos including linear reg, message=FALSE}
 withLRstacking_results
 ```
 
@@ -474,7 +481,7 @@ withLRstacking_results
 
 *We want to maximiize the average percentage return/profit on invested houses. This means that we have to predict actual prices/valuations as accurately as possible. We thus choose the stacking model (excluding Linear Regression) as it was showing the best out of sample performance.*
 
-```{r,warning=FALSE,  message=FALSE }
+```{r,warning=FALSE,  message=FALSE}
 oos<-london_house_prices_2019_out_of_sample
 
 #predict the value of houses
